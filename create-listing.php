@@ -6,6 +6,45 @@ if (!isset($_SESSION['id'])) {
     header("Location: login.php");
     exit;
 }
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Handle form submission for creating a new listing
+    $seller_id = $_SESSION['id'];
+    $category = $_POST['category'];
+    $category_sql = "SELECT id FROM categories WHERE name = '$category'";
+    $title = $_POST['title'];
+    $description = $_POST['description'];
+    $starting_price = $_POST['price'];
+    $current_price = $starting_price;
+    $bid_end_time = date('Y-m-d H:i:s', strtotime('+7 days'));
+    $location = $_POST['location'];
+    $is_closed = 0;
+
+    
+    $category_id = null;
+    switch ($category) {
+        case 'item':
+            $category_id = 1;
+            break;
+        case 'vehicle':
+            $category_id = 2;
+            break;
+        case 'home':
+            $category_id = 3;
+            break;
+        default:
+            $category_id = 1;
+    }
+
+    $sql = "INSERT INTO items (seller_id, category_id, title, description, starting_price, current_price, bid_end_time, is_closed, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+    // Redirect to homepage or listing page after creation
+    header("Location: homepage.php");
+    exit;
+}
+else {
+    // Display the create listing form
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -93,7 +132,7 @@ if (!isset($_SESSION['id'])) {
     </div>
     <div>
         <h2>Create New Listing</h2>
-        <form action="process_listing.php" method="post">
+        <form action="create-listing.php" method="post">
             <div id="preview"></div><br>
             <label for="photos" class="upload-btn">Add Photo</label>
             <input type="file" id="photos" name="photos[]" accept="image/*" multiple hidden>
@@ -109,6 +148,16 @@ if (!isset($_SESSION['id'])) {
                 <option value="item">Item</option>
                 <option value="vehicle">Vehicle</option>
                 <option value="home">Home/Housing</option>
+            </select><br><br>
+
+            <label for="bid-end-time">Bid End Time:</label>
+            <select name="bid-end-time" id="bid-end-time">
+                <option value="1">1 day</option>
+                <option value="3">3 days</option>
+                <option value="7">7 days</option>
+                <option value="custom">
+                    Custom
+                </option>
             </select><br><br>
             <label for="location">Location:</label>
             <input type="text" id="location" name="location" required><br><br>
