@@ -1,0 +1,35 @@
+/* ADD THIS CSS TO THE END OF sidebar/sidebar.css */
+
+/* Notification badge with number - perfect circle */
+.notification-badge {
+    position: absolute;
+    top: 50%;
+    right: 15px;
+    transform: translateY(-50%);
+    min-width: 24px;
+    width: 24px;
+    height: 24px;
+    background: #ff4444;
+    color: white;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #f4f4f4;
+    box-shadow: 0 2px 8px rgba(255, 68, 68, 0.5);
+    animation: pulse-badge 2s infinite;
+    line-height: 1;
+}
+
+@keyframes pulse-badge {
+    0%, 100% {
+        transform: translateY(-50%) scale(1);
+        box-shadow: 0 2px 8px rgba(255, 68, 68, 0.5);
+    }
+    50% {
+        transform: translateY(-50%) scale(1.1);
+        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.7);
+    }
+}
