@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Set timezone to match your local timezone
+date_default_timezone_set('Asia/Manila'); // Change this to your timezone
+
 include '../database/supabase.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -357,8 +361,8 @@ body {
 
         <div id="listings-grid">
             <?php
-                // Get all listings from Supabase
-                $listings = $supabase->select('listings', '*');
+                // Get only active listings from Supabase (exclude disabled/inactive)
+                $listings = $supabase->customQuery('listings', '*', 'status=eq.active');
 
                 if (empty($listings)) {
                     echo "<div style='grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #999;'><div style='font-size: 48px; margin-bottom: 16px;'>📦</div><h2>No listings found</h2></div>";
@@ -499,7 +503,16 @@ body {
                     e.target.closest('.edit-listing-btn')) {
                     return;
                 }
-                window.location.href = 'listing-details.php?id=' + card.dataset.id;
+                
+                const listingId = card.dataset.id;
+                console.log('Card clicked, ID:', listingId);
+                
+                if (!listingId) {
+                    console.error('No listing ID found on card');
+                    return;
+                }
+                
+                window.location.href = 'listing-details.php?id=' + listingId;
             });
         });
 

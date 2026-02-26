@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MineTeh API Tester</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #945a9b;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        button {
+            background: #945a9b;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #6a406e;
+        }
+        .response {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 MineTeh API Tester</h1>
+        <p>Test your REST API endpoints before integrating with Android</p>
+
+        <!-- Login Test -->
+        <div class="test-section">
+            <h3>1. Login</h3>
+            <input type="text" id="loginUsername" placeholder="Username" value="dummy1">
+            <input type="password" id="loginPassword" placeholder="Password" value="password123">
+            <button onclick="testLogin()">Test Login</button>
+            <div id="loginResponse" class="response"></div>
+        </div>
+
+        <!-- Get Listings Test -->
+        <div class="test-section">
+            <h3>2. Get Listings</h3>
+            <input type="text" id="listingsCategory" placeholder="Category (optional)">
+            <input type="number" id="listingsLimit" placeholder="Limit" value="10">
+            <button onclick="testGetListings()">Test Get Listings</button>
+            <div id="listingsResponse" class="response"></div>
+        </div>
+
+        <!-- Get Single Listing Test -->
+        <div class="test-section">
+            <h3>3. Get Single Listing</h3>
+            <input type="number" id="listingId" placeholder="Listing ID" value="3">
+            <button onclick="testGetListing()">Test Get Listing</button>
+            <div id="listingResponse" class="response"></div>
+        </div>
+
+        <!-- Place Bid Test -->
+        <div class="test-section">
+            <h3>4. Place Bid (Requires Login)</h3>
+            <input type="number" id="bidListingId" placeholder="Listing ID">
+            <input type="number" id="bidAmount" placeholder="Bid Amount">
+            <button onclick="testPlaceBid()">Test Place Bid</button>
+            <div id="bidResponse" class="response"></div>
+        </div>
+
+        <!-- Toggle Favorite Test -->
+        <div class="test-section">
+            <h3>5. Toggle Favorite (Requires Login)</h3>
+            <input type="number" id="favListingId" placeholder="Listing ID" value="3">
+            <button onclick="testToggleFavorite()">Test Toggle Favorite</button>
+            <div id="favResponse" class="response"></div>
+        </div>
+
+        <!-- Get Favorites Test -->
+        <div class="test-section">
+            <h3>6. Get Favorites (Requires Login)</h3>
+            <button onclick="testGetFavorites()">Test Get Favorites</button>
+            <div id="favListResponse" class="response"></div>
+        </div>
+    </div>
+
+    <script>
+        let authToken = null;
+        const API_BASE = 'api/v1';
+
+        function displayResponse(elementId, data, isError = false) {
+            const element = document.getElementById(elementId);
+            element.className = 'response ' + (isError ? 'error' : 'success');
+            element.textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function testLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        identifier: username,
+                        password: password
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success && data.data.token) {
+                    authToken = data.data.token;
+                    alert('✅ Login successful! Token saved for authenticated requests.');
+                }
+                
+                displayResponse('loginResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('loginResponse', { error: error.message }, true);
+            }
+        }
+
+        async function testGetListings() {
+            const category = document.getElementById('listingsCategory').value;
+            const limit = document.getElementById('listingsLimit').value;
+
+            let url = `${API_BASE}/listings/index.php?limit=${limit}`;
+            if (category) url += `&category=${category}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                displayResponse('listingsResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('listingsResponse', { error: error.message }, true);
+            }
+        }
+
+        async function testGetListing() {
+            const id = document.getElementById('listingId').value;
+
+            try {
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+
+                const response = await fetch(`${API_BASE}/listings/show.php?id=${id}`, {
+                    headers: headers
+                });
+                const data = await response.json();
+                displayResponse('listingResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('listingResponse', { error: error.message }, true);
+            }
+        }
+
+        async function testPlaceBid() {
+            if (!authToken) {
+                alert('❌ Please login first!');
+                return;
+            }
+
+            const listingId = document.getElementById('bidListingId').value;
+            const bidAmount = document.getElementById('bidAmount').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/bids/place.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        listing_id: parseInt(listingId),
+                        bid_amount: parseFloat(bidAmount)
+                    })
+                });
+
+                const data = await response.json();
+                displayResponse('bidResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('bidResponse', { error: error.message }, true);
+            }
+        }
+
+        async function testToggleFavorite() {
+            if (!authToken) {
+                alert('❌ Please login first!');
+                return;
+            }
+
+            const listingId = document.getElementById('favListingId').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/favorites/toggle.php`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        listing_id: parseInt(listingId)
+                    })
+                });
+
+                const data = await response.json();
+                displayResponse('favResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('favResponse', { error: error.message }, true);
+            }
+        }
+
+        async function testGetFavorites() {
+            if (!authToken) {
+                alert('❌ Please login first!');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/favorites/index.php`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const data = await response.json();
+                displayResponse('favListResponse', data, !data.success);
+            } catch (error) {
+                displayResponse('favListResponse', { error: error.message }, true);
+            }
+        }
+    </script>
+</body>
+</html>

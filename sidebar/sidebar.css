@@ -6,6 +6,45 @@ body {
     overflow-x: hidden;
 }
 
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 4px;
+    transition: background 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #6a406e;
+}
+
+/* Show scrollbar on hover */
+*:hover::-webkit-scrollbar-thumb {
+    background: #945a9b;
+}
+
+*:hover::-webkit-scrollbar-thumb:hover {
+    background: #6a406e;
+}
+
+/* Firefox scrollbar - auto-hide */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+*:hover {
+    scrollbar-color: #945a9b #f1f1f1;
+}
+
 #sidebar {
     width: 240px;
     height: 100vh;
@@ -75,6 +114,26 @@ body {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+.nav-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.nav-section:last-of-type {
+    border-bottom: none;
+}
+
+.nav-section-header {
+    font-size: 12px;
+    font-weight: 700;
+    color: #999;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 8px 15px;
+    margin-bottom: 5px;
 }
 
 .navigation {
@@ -208,15 +267,20 @@ a {
     line-height: 1;
 }
 
+/* Outbid badge - red with pulse animation */
+.outbid-badge {
+    background: #dc3545;
+    animation: pulse-badge 2s infinite;
+}
 
 @keyframes pulse-badge {
     0%, 100% {
         transform: translateY(-50%) scale(1);
-        box-shadow: 0 2px 8px rgba(255, 68, 68, 0.5);
+        box-shadow: 0 2px 8px rgba(220, 53, 69, 0.5);
     }
     50% {
         transform: translateY(-50%) scale(1.1);
-        box-shadow: 0 4px 12px rgba(255, 68, 68, 0.7);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.7);
     }
 }
 

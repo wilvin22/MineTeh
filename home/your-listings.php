@@ -219,6 +219,15 @@ $listings = $supabase->select('listings', '*', ['seller_id' => $user_id]);
             background: #157347;
         }
 
+        .btn-delete {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-delete:hover {
+            background: #5a6268;
+        }
+
         .empty-state {
             text-align: center;
             padding: 60px 20px;
@@ -343,6 +352,10 @@ $listings = $supabase->select('listings', '*', ['seller_id' => $user_id]);
                                            class="btn-small btn-view">
                                             👁️ View
                                         </a>
+                                        <a href="create-listing.php?edit=<?php echo $listing['id']; ?>" 
+                                           class="btn-small btn-edit">
+                                            ✏️ Edit
+                                        </a>
                                         <?php if ($listing['status'] === 'active' || $listing['status'] === 'OPEN'): ?>
                                             <button onclick="disableListing(<?php echo $listing['id']; ?>)" 
                                                     class="btn-small btn-disable">
@@ -354,6 +367,10 @@ $listings = $supabase->select('listings', '*', ['seller_id' => $user_id]);
                                                 ✅ Enable
                                             </button>
                                         <?php endif; ?>
+                                        <button onclick="deleteListing(<?php echo $listing['id']; ?>)" 
+                                                class="btn-small btn-delete">
+                                            🗑️ Delete
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
@@ -410,6 +427,34 @@ $listings = $supabase->select('listings', '*', ['seller_id' => $user_id]);
                 } else {
                     alert('Error: ' + (data.message || 'Failed to enable listing'));
                 }
+            });
+        }
+
+        function deleteListing(listingId) {
+            if (!confirm('⚠️ DELETE this listing permanently?\n\nThis action CANNOT be undone!\n\nAll listing data, images, bids, and favorites will be permanently removed.')) return;
+
+            fetch('../api/manage-listing.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    listing_id: listingId,
+                    action: 'delete'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Listing deleted successfully!');
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to delete listing'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to delete listing');
             });
         }
     </script>

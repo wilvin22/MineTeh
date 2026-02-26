@@ -3,6 +3,10 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
 session_start();
+
+// Set timezone to match your local timezone (adjust as needed)
+date_default_timezone_set('Asia/Manila'); // Change this to your timezone
+
 include "../database/supabase.php";
 
 if (!isset($_SESSION['user_id'])) {
@@ -90,6 +94,9 @@ if (isset($_POST['create_listing'])) {
     if (!$edit_mode) {
         $listingData['seller_id'] = $seller_id;
         $listingData['status'] = 'active';
+    } else {
+        // In edit mode, handle status toggle
+        $listingData['status'] = isset($_POST['listing_status']) && $_POST['listing_status'] === 'active' ? 'active' : 'inactive';
     }
 
     // Only BID listings have end time and min bid increment
@@ -600,6 +607,118 @@ if (isset($_POST['create_listing'])) {
             font-style: italic;
         }
 
+        /* Status Toggle Styles */
+        .status-toggle-container {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 12px;
+            border: 2px solid #e9ecef;
+        }
+
+        .status-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .status-label {
+            font-size: 14px;
+            color: #666;
+            font-weight: 600;
+        }
+
+        .status-value {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .status-value.status-active {
+            background: #d1e7dd;
+            color: #0f5132;
+        }
+
+        .status-value.status-inactive {
+            background: #f8d7da;
+            color: #842029;
+        }
+
+        .status-toggle {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #dc3545;
+            transition: 0.4s;
+            border-radius: 34px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #28a745;
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .toggle-text-active {
+            color: #28a745;
+        }
+
+        .toggle-text-inactive {
+            color: #dc3545;
+        }
+
+        .status-description {
+            font-size: 13px;
+            color: #666;
+            font-style: italic;
+        }
+
         /* Submit Button */
         .submit-section {
             padding: 30px;
@@ -896,6 +1015,38 @@ if (isset($_POST['create_listing'])) {
                         </div>
                     </div>
                 </div>
+
+                <?php if ($edit_mode): ?>
+                <!-- Listing Status Section (Edit Mode Only) -->
+                <div class="form-section">
+                    <h3 class="section-title">📊 Listing Status</h3>
+                    <div class="status-toggle-container">
+                        <div class="status-info">
+                            <div class="status-label">Current Status:</div>
+                            <div class="status-value <?php echo $listing_data['status'] === 'active' ? 'status-active' : 'status-inactive'; ?>">
+                                <?php echo strtoupper($listing_data['status']); ?>
+                            </div>
+                        </div>
+                        <div class="status-toggle">
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="listing_status" value="active" <?php echo $listing_data['status'] === 'active' ? 'checked' : ''; ?>>
+                                <span class="toggle-slider"></span>
+                            </label>
+                            <div class="toggle-label">
+                                <span class="toggle-text-active">Active</span>
+                                <span class="toggle-text-inactive">Disabled</span>
+                            </div>
+                        </div>
+                        <div class="status-description">
+                            <?php if ($listing_data['status'] === 'active'): ?>
+                                Your listing is visible to buyers
+                            <?php else: ?>
+                                Your listing is hidden from buyers
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <!-- Submit Section -->
                 <div class="submit-section">

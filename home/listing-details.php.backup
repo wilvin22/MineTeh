@@ -1,6 +1,12 @@
 <?php
+// Suppress warnings temporarily to see the page
+error_reporting(E_ERROR);
+
 session_start();
-date_default_timezone_set('Asia/Manila');
+
+// Set timezone to match your local timezone
+date_default_timezone_set('Asia/Manila'); // Change this to your timezone
+
 include '../database/supabase.php';
 
 if (!isset($_GET['id'])) {
@@ -13,39 +19,35 @@ $listing_id = (int)$_GET['id'];
 // Get listing details (using 'id' column, not 'listing_id')
 $listing = $supabase->select('listings', '*', ['id' => $listing_id]);
 
-// Check if query failed or returned empty
+// Debug: Check what we got
 if ($listing === false || empty($listing) || !is_array($listing)) {
-    echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Listing Not Found</title></head><body>";
-    echo "<div style='background: #fff3cd; border: 2px solid #ffc107; padding: 20px; margin: 20px; border-radius: 10px; font-family: Arial, sans-serif;'>";
+    echo "<div style='background: #fff3cd; border: 2px solid #ffc107; padding: 20px; margin: 20px; border-radius: 10px;'>";
     echo "<h2>⚠️ Cannot Load Listing</h2>";
     echo "<p><strong>Listing ID:</strong> " . $listing_id . "</p>";
+    echo "<p><strong>Query Result:</strong> " . (is_bool($listing) ? 'false (query failed)' : 'empty array') . "</p>";
     
     $error = $supabase->getLastError();
     if ($error) {
         echo "<h3>Supabase Error:</h3>";
         echo "<p><strong>HTTP Code:</strong> " . $error['http_code'] . "</p>";
         echo "<p><strong>Message:</strong> " . htmlspecialchars($error['response']) . "</p>";
+        echo "<p><strong>URL:</strong> " . htmlspecialchars($error['url']) . "</p>";
     }
     
+    echo "<h3>🔧 How to Fix:</h3>";
+    echo "<ol>";
+    echo "<li>Go to <a href='https://supabase.com/dashboard' target='_blank'>Supabase Dashboard</a></li>";
+    echo "<li>Select your project</li>";
+    echo "<li>Go to <strong>Table Editor</strong> → <strong>listings</strong> table</li>";
+    echo "<li>Click the shield icon or RLS toggle to <strong>DISABLE</strong> Row Level Security</li>";
+    echo "<li>Refresh this page</li>";
+    echo "</ol>";
     echo "<p><a href='homepage.php' style='display: inline-block; padding: 10px 20px; background: #945a9b; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;'>← Back to Homepage</a></p>";
-    echo "</div></body></html>";
+    echo "</div>";
     die();
 }
 
-// Extract the first result
 $listing = $listing[0];
-
-// Final safety check
-if (!is_array($listing) || !isset($listing['title'])) {
-    echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Listing Not Found</title></head><body>";
-    echo "<div style='background: #f8d7da; border: 2px solid #dc3545; padding: 20px; margin: 20px; border-radius: 10px; font-family: Arial, sans-serif;'>";
-    echo "<h2>❌ Listing Not Found</h2>";
-    echo "<p>The listing you're looking for could not be found.</p>";
-    echo "<p>Debug: listing type = " . gettype($listing) . "</p>";
-    echo "<p><a href='homepage.php' style='display: inline-block; padding: 10px 20px; background: #945a9b; color: white; text-decoration: none; border-radius: 5px; margin-top: 10px;'>← Back to Homepage</a></p>";
-    echo "</div></body></html>";
-    die();
-}
 
 // Get seller information
 $seller = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $listing['seller_id']]);
@@ -62,9 +64,6 @@ $bids = [];
 $highest_bid = null;
 if ($listing['listing_type'] === 'BID') {
     $bids = $supabase->customQuery('bids', '*', 'listing_id=eq.' . $listing_id . '&order=bid_amount.desc');
-    if (!is_array($bids)) {
-        $bids = [];
-    }
     if (!empty($bids)) {
         $highest_bid = $bids[0];
     }

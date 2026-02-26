@@ -1,0 +1,11 @@
+﻿<?php
+session_start();
+date_default_timezone_set('Asia/Manila');
+include '../database/supabase.php';
+
+if (!isset($_GET['id'])) {
+    header("Location: homepage.php");
+    exit;
+}
+
+$listing_id = (int)$_GET['id'];

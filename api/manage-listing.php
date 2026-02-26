@@ -60,6 +60,18 @@ switch ($action) {
         );
         break;
         
+    case 'delete':
+        // Delete listing permanently
+        // First delete related data
+        $supabase->delete('listing_images', ['listing_id' => $listing_id]);
+        $supabase->delete('bids', ['listing_id' => $listing_id]);
+        $supabase->delete('favorites', ['listing_id' => $listing_id]);
+        $supabase->delete('cart_items', ['listing_id' => $listing_id]);
+        
+        // Then delete the listing itself
+        $result = $supabase->delete('listings', ['id' => $listing_id]);
+        break;
+        
     default:
         echo json_encode(['success' => false, 'message' => 'Invalid action']);
         exit;

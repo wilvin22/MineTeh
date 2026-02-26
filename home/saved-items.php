@@ -229,7 +229,7 @@ $favorites = $supabase->select('favorites', '*', ['user_id' => $user_id]);
                 },
                 body: JSON.stringify({
                     listing_id: listingId,
-                    favorite: false
+                    action: 'remove'
                 })
             })
             .then(response => response.json())
@@ -237,8 +237,12 @@ $favorites = $supabase->select('favorites', '*', ['user_id' => $user_id]);
                 if (data.success) {
                     location.reload();
                 } else {
-                    alert('Failed to remove item');
+                    alert('Failed to remove item: ' + (data.message || 'Unknown error'));
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to remove item');
             });
         }
     </script>

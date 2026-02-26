@@ -23,7 +23,7 @@ if (isset($_POST['place_bid'])) {
         die("You cannot bid on your own auction");
     }
 
-    if ($listing['status'] !== 'OPEN') {
+    if ($listing['status'] !== 'OPEN' && $listing['status'] !== 'active') {
         die("Bidding is closed");
     }
 
