@@ -1,6 +1,7 @@
 <?php
 session_start();
 include '../database/supabase.php';
+include '../database/notifications_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login.php");
@@ -65,18 +66,39 @@ if (isset($_POST['place_order'])) {
         'buyer_id' => $user_id,
         'seller_id' => $listing['seller_id'],
         'listing_id' => $listing_id,
-        'order_amount' => $listing['price'],
+        'total_amount' => $listing['price'],
         'payment_method' => $payment_method,
         'payment_status' => 'pending',
         'delivery_address' => $delivery_address,
         'delivery_method' => $delivery_method,
-        'order_status' => 'processing'
+        'status' => 'pending'
     ];
     
     $result = $supabase->insert('orders', $order_data);
     
     if ($result && !empty($result[0])) {
         $order_id = $result[0]['order_id'];
+        
+        // Create notification helper
+        $notificationHelper = new NotificationsHelper();
+        
+        // Notify buyer
+        $notificationHelper->notifyOrderUpdate(
+            $user_id,
+            $order_id,
+            'confirmed',
+            $listing['title']
+        );
+        
+        // Notify seller
+        $notificationHelper->createNotification(
+            $listing['seller_id'],
+            'order_update',
+            'New Order Received!',
+            $buyer['username'] . ' ordered "' . $listing['title'] . '" for ₱' . number_format($listing['price'], 2),
+            'your-orders.php'
+        );
+        
         header("Location: order-confirmation.php?order_id=$order_id");
         exit;
     } else {

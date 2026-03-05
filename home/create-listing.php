@@ -69,6 +69,11 @@ if (isset($_POST['create_listing'])) {
     $location = trim($_POST['location']);
     $listing_type = $_POST['listing_type'];
 
+    // Validate photos are uploaded for new listings
+    if (!$edit_mode && (empty($_FILES['photos']['name'][0]) || $_FILES['photos']['error'][0] === UPLOAD_ERR_NO_FILE)) {
+        $error_message = "At least one photo is required for new listings.";
+    } else {
+
     // Get category_id from category_slug
     $category_id = null;
     foreach ($categories as $cat) {
@@ -196,6 +201,7 @@ if (isset($_POST['create_listing'])) {
     } else {
         $error_message = $edit_mode ? "Error updating listing. Please try again." : "Error creating listing. Please try again.";
     }
+    } // Close the photo validation else block
 }
 ?>
 <!DOCTYPE html>
@@ -837,10 +843,10 @@ if (isset($_POST['create_listing'])) {
                     
                     <div class="photo-upload-area" onclick="document.getElementById('photos').click()">
                         <div class="upload-icon">🖼️</div>
-                        <div class="upload-text">Click to upload photos</div>
+                        <div class="upload-text">Click to upload photos <span class="required">*</span></div>
                         <div class="upload-hint">or drag and drop (Max 5 photos, JPG/PNG/WEBP/GIF)</div>
                     </div>
-                    <input type="file" id="photos" name="photos[]" accept="image/*" multiple hidden>
+                    <input type="file" id="photos" name="photos[]" accept="image/*" multiple hidden <?php echo !$edit_mode ? 'required' : ''; ?>>
                     
                     <?php if ($edit_mode && !empty($listing_images)): ?>
                     <div id="existing-images" style="margin-top: 20px;">
@@ -1268,6 +1274,113 @@ if (isset($_POST['create_listing'])) {
                 });
             }
         }
+
+        // Form validation for photo requirement
+        const listingForm = document.querySelector('.listing-form');
+        const isEditMode = <?php echo $edit_mode ? 'true' : 'false'; ?>;
+        const hasExistingImages = <?php echo ($edit_mode && !empty($listing_images)) ? 'true' : 'false'; ?>;
+
+        listingForm.addEventListener('submit', function(e) {
+            let errors = [];
+            
+            // Check photos (only for new listings)
+            if (!isEditMode && filesArray.length === 0) {
+                errors.push({
+                    field: 'photos',
+                    message: 'Please upload at least one photo for your listing.',
+                    element: uploadArea
+                });
+            }
+            
+            // Check title
+            const titleInput = document.querySelector('input[name="title"]');
+            if (!titleInput.value.trim()) {
+                errors.push({
+                    field: 'title',
+                    message: 'Please enter a title for your listing.',
+                    element: titleInput
+                });
+            }
+            
+            // Check description
+            const descInput = document.querySelector('textarea[name="description"]');
+            if (!descInput.value.trim()) {
+                errors.push({
+                    field: 'description',
+                    message: 'Please enter a description for your listing.',
+                    element: descInput
+                });
+            }
+            
+            // Check category
+            const categorySelect = document.querySelector('select[name="category"]');
+            if (!categorySelect.value) {
+                errors.push({
+                    field: 'category',
+                    message: 'Please select a category for your listing.',
+                    element: categorySelect
+                });
+            }
+            
+            // Check location
+            const locationInput = document.querySelector('input[name="location"]');
+            if (!locationInput.value.trim()) {
+                errors.push({
+                    field: 'location',
+                    message: 'Please enter a location for your listing.',
+                    element: locationInput
+                });
+            }
+            
+            // Check price
+            const priceInput = document.querySelector('input[name="price"]');
+            if (!priceInput.value || parseFloat(priceInput.value) <= 0) {
+                errors.push({
+                    field: 'price',
+                    message: 'Please enter a valid price greater than 0.',
+                    element: priceInput
+                });
+            }
+            
+            // Check listing type
+            const listingTypeChecked = document.querySelector('input[name="listing_type"]:checked');
+            if (!listingTypeChecked) {
+                errors.push({
+                    field: 'listing_type',
+                    message: 'Please select a listing type (Fixed Price or Auction).',
+                    element: document.querySelector('.listing-type-cards')
+                });
+            }
+            
+            // If there are errors, show them one by one
+            if (errors.length > 0) {
+                e.preventDefault();
+                
+                // Show first error
+                const firstError = errors[0];
+                alert(firstError.message);
+                
+                // Scroll to and highlight the field
+                firstError.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                if (firstError.element.tagName === 'INPUT' || 
+                    firstError.element.tagName === 'TEXTAREA' || 
+                    firstError.element.tagName === 'SELECT') {
+                    firstError.element.focus();
+                    firstError.element.style.border = '2px solid #dc3545';
+                    setTimeout(() => {
+                        firstError.element.style.border = '';
+                    }, 3000);
+                } else {
+                    firstError.element.style.border = '2px solid #dc3545';
+                    setTimeout(() => {
+                        firstError.element.style.border = '2px dashed #ddd';
+                    }, 3000);
+                }
+                
+                return false;
+            }
+        });
     </script>
 </body>
 </html>

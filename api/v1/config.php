@@ -2,7 +2,7 @@
 // API Configuration and Helper Functions
 
 // CORS headers for mobile app access
-header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Origin: https://192.168.18.4.com');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Content-Type: application/json');

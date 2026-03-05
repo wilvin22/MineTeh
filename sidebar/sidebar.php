@@ -7,6 +7,21 @@
     <!-- Browse Section -->
     <div class="nav-section">
         <div class="nav-section-header">🏠 Browse</div>
+        <a href="dashboard.php">
+            <div class="navigation" id="dashboard">
+                <span>📊</span>&nbsp;&nbsp;My Dashboard
+            </div>
+        </a>
+        <a href="homepage.php">
+            <div class="navigation" id="explore">
+                <span>🏠</span>&nbsp;&nbsp;Home / Explore
+            </div>
+        </a>
+        <a href="homepage.php">
+            <div class="navigation" id="explore">
+                <span>🏠</span>&nbsp;&nbsp;Home / Explore
+            </div>
+        </a>
         <a href="homepage.php">
             <div class="navigation" id="explore">
                 <span>🏠</span>&nbsp;&nbsp;Home / Explore
@@ -96,6 +111,23 @@
     <!-- Communication Section -->
     <div class="nav-section">
         <div class="nav-section-header">💬 Communication</div>
+        <a href="notifications.php">
+            <div class="navigation" id="notifications" style="position: relative;">
+                <span>🔔</span>&nbsp;&nbsp;Notifications
+                <?php
+                if (isset($_SESSION['user_id'])) {
+                    if (!isset($supabase)) {
+                        include_once __DIR__ . '/../database/supabase.php';
+                    }
+                    // Only count non-message notifications
+                    $notif_count = $supabase->customQuery('notifications', 'id', 'user_id=eq.' . $_SESSION['user_id'] . '&is_read=eq.false&type=neq.new_message');
+                    if ($notif_count && is_array($notif_count) && count($notif_count) > 0) {
+                        echo '<span class="notification-badge">' . count($notif_count) . '</span>';
+                    }
+                }
+                ?>
+            </div>
+        </a>
         <a href="messages.php">
             <div class="navigation" id="messages" style="position: relative;">
                 <span>💬</span>&nbsp;&nbsp;Messages

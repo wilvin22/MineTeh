@@ -9,8 +9,16 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
-// Get all orders for this user
-$orders = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id . '&order=created_at.desc');
+// Determine view mode (buyer or seller)
+$view_mode = isset($_GET['view']) ? $_GET['view'] : 'buyer';
+
+if ($view_mode === 'seller') {
+    // Get all orders where user is the seller
+    $orders = $supabase->customQuery('orders', '*', 'seller_id=eq.' . $user_id . '&order=created_at.desc');
+} else {
+    // Get all orders where user is the buyer
+    $orders = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id . '&order=created_at.desc');
+}
 
 // Organize orders by status
 $pending_orders = [];
@@ -26,6 +34,15 @@ if (!empty($orders)) {
             // Get first image
             $images = $supabase->select('listing_images', 'image_path', ['listing_id' => $listing['id']]);
             $listing['image'] = !empty($images) ? $images[0]['image_path'] : '../assets/no-image.png';
+            
+            // Get other party info (buyer or seller depending on view mode)
+            if ($view_mode === 'seller') {
+                $other_party = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['buyer_id']], true);
+                $order['buyer_name'] = $other_party ? $other_party['username'] : 'Unknown';
+            } else {
+                $other_party = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['seller_id']], true);
+                $order['seller_name'] = $other_party ? $other_party['username'] : 'Unknown';
+            }
             
             $order['listing'] = $listing;
             
@@ -321,7 +338,17 @@ if (!empty($orders)) {
         <div class="orders-container">
             <div class="page-header">
                 <div class="page-title">📦 Your Orders</div>
-                <div class="page-subtitle">Track and manage all your purchases</div>
+                <div class="page-subtitle">Track and manage all your <?php echo $view_mode === 'seller' ? 'sales' : 'purchases'; ?></div>
+            </div>
+
+            <!-- View Mode Toggle -->
+            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                <a href="?view=buyer" class="btn <?php echo $view_mode === 'buyer' ? 'btn-primary' : 'btn-secondary'; ?>" style="text-decoration: none;">
+                    🛍️ My Purchases
+                </a>
+                <a href="?view=seller" class="btn <?php echo $view_mode === 'seller' ? 'btn-primary' : 'btn-secondary'; ?>" style="text-decoration: none;">
+                    💰 My Sales
+                </a>
             </div>
 
             <div class="tabs-container">
@@ -368,12 +395,22 @@ if (!empty($orders)) {
                                     <div class="order-details">
                                         <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
                                         <div class="order-info">
+                                            <?php if ($view_mode === 'seller'): ?>
+                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
+                                            <?php else: ?>
+                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
+                                            <?php endif; ?>
                                             <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
                                             <div>📅 Ordered: <?php echo date('M d, Y g:i A', strtotime($order['created_at'])); ?></div>
+                                            <div>💳 Payment: <?php echo ucfirst($order['payment_method']); ?> (<?php echo ucfirst($order['payment_status']); ?>)</div>
+                                            <div>🚚 Delivery: <?php echo ucfirst($order['delivery_method']); ?></div>
                                         </div>
                                         <div class="order-price">₱<?php echo number_format($order['total_amount'], 2); ?></div>
                                         <div class="order-actions">
                                             <a href="listing-details.php?id=<?php echo $order['listing_id']; ?>" class="btn btn-primary">View Item</a>
+                                            <?php if ($view_mode === 'seller'): ?>
+                                                <button class="btn btn-secondary" onclick="viewDeliveryAddress(<?php echo $order['order_id']; ?>)">View Address</button>
+                                            <?php endif; ?>
                                         </div>
                                     </div>
                                 </div>
@@ -412,8 +449,14 @@ if (!empty($orders)) {
                                     <div class="order-details">
                                         <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
                                         <div class="order-info">
+                                            <?php if ($view_mode === 'seller'): ?>
+                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
+                                            <?php else: ?>
+                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
+                                            <?php endif; ?>
                                             <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
                                             <div>📅 Completed: <?php echo date('M d, Y g:i A', strtotime($order['updated_at'])); ?></div>
+                                            <div>💳 Payment: <?php echo ucfirst($order['payment_method']); ?> (<?php echo ucfirst($order['payment_status']); ?>)</div>
                                         </div>
                                         <div class="order-price">₱<?php echo number_format($order['total_amount'], 2); ?></div>
                                         <div class="order-actions">
@@ -456,6 +499,11 @@ if (!empty($orders)) {
                                     <div class="order-details">
                                         <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
                                         <div class="order-info">
+                                            <?php if ($view_mode === 'seller'): ?>
+                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
+                                            <?php else: ?>
+                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
+                                            <?php endif; ?>
                                             <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
                                             <div>📅 Cancelled: <?php echo date('M d, Y g:i A', strtotime($order['updated_at'])); ?></div>
                                         </div>
@@ -474,6 +522,21 @@ if (!empty($orders)) {
     </div>
 
     <script>
+        // Store delivery addresses for modal
+        const deliveryAddresses = {
+            <?php 
+            if (!empty($orders)) {
+                foreach ($orders as $order) {
+                    echo '"' . $order['order_id'] . '": ' . json_encode($order['delivery_address']) . ',';
+                }
+            }
+
+            if (!empty($address_items)) {
+                echo implode(',', $address_items);
+            }
+            ?>
+            };
+
         function showTab(tabName) {
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
@@ -490,6 +553,15 @@ if (!empty($orders)) {
             
             // Add active to clicked button
             event.target.classList.add('active');
+        }
+
+        function viewDeliveryAddress(orderId) {
+            const address = deliveryAddresses[orderId];
+            if (address) {
+                alert('Delivery Address:\n\n' + address);
+            } else {
+                alert('Address not found');
+            }
         }
     </script>
 </body>

@@ -2,6 +2,7 @@
 session_start();
 header('Content-Type: application/json');
 include '../database/supabase.php';
+include '../database/notifications_helper.php';
 
 if(!isset($_SESSION['user_id'])) {
     echo json_encode(['success'=>false, 'message' => 'Not logged in']);
@@ -35,6 +36,22 @@ if ($action === 'add') {
         if ($result === false) {
             echo json_encode(['success'=>false, 'message' => 'Failed to add favorite']);
             exit;
+        }
+        
+        // Get listing and user info for notification
+        $listing = $supabase->select('listings', 'title,seller_id', ['id' => $listing_id], true);
+        $user = $supabase->select('accounts', 'username', ['account_id' => $user_id], true);
+        
+        if ($listing && $user && $listing['seller_id'] != $user_id) {
+            // Notify seller that someone favorited their listing
+            $notificationHelper = new NotificationsHelper();
+            $notificationHelper->createNotification(
+                $listing['seller_id'],
+                'listing_sold',
+                'Someone saved your listing!',
+                $user['username'] . ' added "' . $listing['title'] . '" to their favorites',
+                'listing-details.php?id=' . $listing_id
+            );
         }
     }
     echo json_encode(['success'=>true, 'message' => 'Added to favorites']);

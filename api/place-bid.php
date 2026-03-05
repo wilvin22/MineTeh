@@ -1,10 +1,13 @@
 <?php
 session_start();
 include "../database/supabase.php";
+include "../database/notifications_helper.php";
 
 if (!isset($_SESSION['user_id'])) {
     die("Login required");
 }
+
+$notificationHelper = new NotificationsHelper();
 
 if (isset($_POST['place_bid'])) {
     $user_id = $_SESSION['user_id'];
@@ -46,6 +49,39 @@ if (isset($_POST['place_bid'])) {
         'user_id' => $user_id,
         'bid_amount' => $bid_amount
     ]);
+
+    // Get bidder's username
+    $bidder = $supabase->select('accounts', 'username', ['account_id' => $user_id], true);
+    $bidder_name = $bidder ? $bidder['username'] : 'Someone';
+
+    // Notify seller about new bid
+    $notificationHelper->notifyBidReceived(
+        $listing['seller_id'],
+        $listing_id,
+        $listing['title'],
+        $bid_amount,
+        $bidder_name
+    );
+
+    // Check if there are previous bidders to notify (they've been outbid)
+    $previous_bids = $supabase->customQuery('bids', '*', 
+        'listing_id=eq.' . $listing_id . '&user_id=neq.' . $user_id . '&order=bid_amount.desc');
+    
+    if ($previous_bids && is_array($previous_bids)) {
+        $notified_users = [];
+        foreach ($previous_bids as $prev_bid) {
+            // Only notify each user once
+            if (!in_array($prev_bid['user_id'], $notified_users)) {
+                $notificationHelper->notifyOutbid(
+                    $prev_bid['user_id'],
+                    $listing_id,
+                    $listing['title'],
+                    $bid_amount
+                );
+                $notified_users[] = $prev_bid['user_id'];
+            }
+        }
+    }
 
     header("Location: ../home/listing-details.php?id=$listing_id");
     exit;

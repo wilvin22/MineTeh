@@ -367,6 +367,35 @@ body {
                 if (empty($listings)) {
                     echo "<div style='grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #999;'><div style='font-size: 48px; margin-bottom: 16px;'>📦</div><h2>No listings found</h2></div>";
                 } else {
+                    // Get all listing IDs
+                    $listingIds = array_column($listings, 'id');
+                    
+                    // Batch fetch all images for these listings
+                    $allImages = [];
+                    if (!empty($listingIds)) {
+                        $imageQuery = 'listing_id=in.(' . implode(',', $listingIds) . ')&order=image_id.asc';
+                        $images = $supabase->customQuery('listing_images', 'listing_id,image_path', $imageQuery);
+                        
+                        if ($images !== false && !empty($images)) {
+                            foreach ($images as $image) {
+                                $lid = $image['listing_id'];
+                                if (!isset($allImages[$lid])) {
+                                    $allImages[$lid] = $image['image_path'];
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Batch fetch favorites for current user
+                    $userFavorites = [];
+                    if (isset($_SESSION['user_id'])) {
+                        $favQuery = 'user_id=eq.' . $_SESSION['user_id'] . '&listing_id=in.(' . implode(',', $listingIds) . ')';
+                        $favorites = $supabase->customQuery('favorites', 'listing_id', $favQuery);
+                        if ($favorites !== false && !empty($favorites)) {
+                            $userFavorites = array_column($favorites, 'listing_id');
+                        }
+                    }
+                    
                     foreach ($listings as $row) {
                         $listing_id   = (int)$row['id'];
                         $seller_id    = (int)$row['seller_id'];
@@ -378,23 +407,11 @@ body {
                         // Check if this is the user's listing
                         $is_own_listing = isset($_SESSION['user_id']) && $_SESSION['user_id'] == $seller_id;
 
-                        // Get first image for this listing
-                        $images = $supabase->select('listing_images', 'image_path', ['listing_id' => $listing_id]);
-                        
-                        $listing_image = "../assets/no-image.png";
-                        if (!empty($images)) {
-                            $listing_image = $images[0]['image_path'];
-                        }
+                        // Get image from batch results
+                        $listing_image = isset($allImages[$listing_id]) ? $allImages[$listing_id] : "../assets/no-image.png";
 
-                        // Check if user has favorited this listing
-                        $is_favorited = false;
-                        if (isset($_SESSION['user_id'])) {
-                            $favorite_check = $supabase->select('favorites', 'favorite_id', [
-                                'user_id' => $_SESSION['user_id'],
-                                'listing_id' => $listing_id
-                            ]);
-                            $is_favorited = !empty($favorite_check);
-                        }
+                        // Check if user has favorited this listing from batch results
+                        $is_favorited = in_array($listing_id, $userFavorites);
 
                         $badgeClass = $listing_type === 'BID' ? 'bid' : 'fixed';
                         

@@ -33,6 +33,9 @@ if (isset($_POST['send_message']) && isset($_POST['conversation_id'])) {
             'message_text' => $message_text
         ]);
         
+        // Messages have their own unread system in the messages table
+        // No need for separate notifications
+        
         // Return JSON for AJAX requests
         if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
             strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest') {
