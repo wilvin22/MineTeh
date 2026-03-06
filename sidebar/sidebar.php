@@ -17,16 +17,6 @@
                 <span>🏠</span>&nbsp;&nbsp;Home / Explore
             </div>
         </a>
-        <a href="homepage.php">
-            <div class="navigation" id="explore">
-                <span>🏠</span>&nbsp;&nbsp;Home / Explore
-            </div>
-        </a>
-        <a href="homepage.php">
-            <div class="navigation" id="explore">
-                <span>🏠</span>&nbsp;&nbsp;Home / Explore
-            </div>
-        </a>
         <a href="bids.php">
             <div class="navigation" id="bids" style="position: relative;">
                 <span>💰</span>&nbsp;&nbsp;Your Bids
