@@ -918,3 +918,192 @@ if (isset($_SESSION['user_id'])) {
     </script>
 </body>
 </html>
+                alert('Error enabling listing');
+                console.error(error);
+            });
+        }
+
+        // Bid history functionality
+        <?php if ($listing['listing_type'] == 'BID'): ?>
+        function loadBidHistory() {
+            fetch('../api/get-bid-history.php?listing_id=<?php echo $listing_id; ?>')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.bids) {
+                        displayBidHistory(data.bids);
+                    }
+                })
+                .catch(error => console.error('Error loading bid history:', error));
+        }
+
+        function displayBidHistory(bids) {
+            const container = document.getElementById('bid-history-list');
+            if (!container) return;
+
+            if (bids.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">No bids yet</p>';
+                return;
+            }
+
+            container.innerHTML = bids.map((bid, index) => `
+                <div class="bid-item">
+                    <div class="bid-rank">#${index + 1}</div>
+                    <div class="bid-details">
+                        <div class="bid-user">${bid.username || 'Anonymous'}</div>
+                        <div class="bid-time">${formatDate(bid.created_at)}</div>
+                    </div>
+                    <div class="bid-amount">₱${parseFloat(bid.bid_amount).toLocaleString('en-PH', {minimumFractionDigits: 2})}</div>
+                </div>
+            `).join('');
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+            
+            return date.toLocaleDateString('en-PH', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Load bid history on page load
+        loadBidHistory();
+
+        // Refresh bid history every 30 seconds
+        setInterval(loadBidHistory, 30000);
+
+        // Auction countdown timer
+        function updateCountdown() {
+            const endTime = new Date('<?php echo $listing['bid_end_time']; ?>').getTime();
+            const now = new Date().getTime();
+            const distance = endTime - now;
+
+            if (distance < 0) {
+                document.getElementById('countdown-timer').innerHTML = '<span style="color: #e74c3c;">Auction Ended</span>';
+                clearInterval(countdownInterval);
+                return;
+            }
+
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            let timeString = '';
+            if (days > 0) timeString += `${days}d `;
+            timeString += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            document.getElementById('countdown-timer').textContent = timeString;
+        }
+
+        // Update countdown every second
+        const countdownInterval = setInterval(updateCountdown, 1000);
+        updateCountdown(); // Initial call
+        <?php endif; ?>
+
+        // Image gallery functionality
+        let currentImageIndex = 0;
+        const images = <?php echo json_encode(array_map(function($img) {
+            return str_replace('../', '', $img['image_path']);
+        }, $listing_images)); ?>;
+
+        function changeImage(direction) {
+            currentImageIndex += direction;
+            if (currentImageIndex < 0) currentImageIndex = images.length - 1;
+            if (currentImageIndex >= images.length) currentImageIndex = 0;
+            
+            document.getElementById('main-image').src = images[currentImageIndex];
+            
+            // Update thumbnail selection
+            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
+                thumb.classList.toggle('active', index === currentImageIndex);
+            });
+        }
+
+        function selectImage(index) {
+            currentImageIndex = index;
+            document.getElementById('main-image').src = images[index];
+            
+            document.querySelectorAll('.thumbnail').forEach((thumb, idx) => {
+                thumb.classList.toggle('active', idx === index);
+            });
+        }
+
+        // Keyboard navigation for image gallery
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') changeImage(-1);
+            if (e.key === 'ArrowRight') changeImage(1);
+        });
+
+        // Bid form validation
+        <?php if ($listing['listing_type'] == 'BID' && $listing['status'] == 'OPEN'): ?>
+        const bidForm = document.getElementById('bid-form');
+        if (bidForm) {
+            bidForm.addEventListener('submit', function(e) {
+                const bidAmount = parseFloat(document.getElementById('bid-amount').value);
+                const currentBid = <?php echo $listing['current_bid'] ?? $listing['starting_price']; ?>;
+                const minIncrement = <?php echo $listing['min_bid_increment'] ?? 10; ?>;
+                const minBid = currentBid + minIncrement;
+
+                if (bidAmount < minBid) {
+                    e.preventDefault();
+                    alert(`Minimum bid is ₱${minBid.toLocaleString('en-PH', {minimumFractionDigits: 2})}`);
+                    return false;
+                }
+
+                // Show loading state
+                const submitBtn = this.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Placing Bid...';
+            });
+        }
+        <?php endif; ?>
+
+        // Add to cart functionality
+        <?php if ($listing['listing_type'] == 'FIXED'): ?>
+        function addToCart() {
+            const formData = new FormData();
+            formData.append('listing_id', <?php echo $listing_id; ?>);
+            formData.append('action', 'add');
+
+            fetch('../api/cart-action.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Added to cart successfully!');
+                    // Update cart count if you have one
+                    const cartCount = document.querySelector('.cart-count');
+                    if (cartCount) {
+                        cartCount.textContent = parseInt(cartCount.textContent || 0) + 1;
+                    }
+                } else {
+                    alert('Error: ' + (data.message || 'Failed to add to cart'));
+                }
+            })
+            .catch(error => {
+                alert('Error adding to cart');
+                console.error(error);
+            });
+        }
+        <?php endif; ?>
+
+        console.log('Listing details page loaded successfully');
+    </script>
+</body>
+</html>

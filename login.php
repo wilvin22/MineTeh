@@ -1246,3 +1246,159 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
     </div>
 </body>
 </html>
+        }
+
+        const signupForm = document.getElementById('signup-form');
+        if (signupForm) {
+            console.log('Signup form found, adding listener');
+            signupForm.addEventListener('submit', function(e) {
+                console.log('SIGNUP FORM SUBMITTING - NOT PREVENTING');
+                // Don't prevent, just let it submit
+            });
+        } else {
+            console.error('Signup form NOT found!');
+        }
+
+        // Toggle between login and signup forms
+        const showSignupBtn = document.getElementById('show-signup');
+        const backToLoginBtn = document.getElementById('back-to-login');
+        const loginFormContainer = document.getElementById('login-form-container');
+        const signupFormContainer = document.getElementById('signup-form-container');
+
+        if (showSignupBtn) {
+            showSignupBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Switching to signup form');
+                loginFormContainer.style.display = 'none';
+                signupFormContainer.style.display = 'block';
+            });
+        }
+
+        if (backToLoginBtn) {
+            backToLoginBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Switching to login form');
+                signupFormContainer.style.display = 'none';
+                loginFormContainer.style.display = 'block';
+            });
+        }
+
+        // Password toggle functionality
+        function togglePassword(inputId, button) {
+            const input = document.getElementById(inputId);
+            const svg = button.querySelector('svg');
+            
+            if (input.type === 'password') {
+                input.type = 'text';
+                svg.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+            } else {
+                input.type = 'password';
+                svg.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+            }
+        }
+
+        // Password strength validation
+        const signupPassword = document.getElementById('signup-password');
+        if (signupPassword) {
+            signupPassword.addEventListener('input', function() {
+                const password = this.value;
+                const requirements = {
+                    length: password.length >= 6 && password.length <= 20,
+                    lowercase: /[a-z]/.test(password),
+                    uppercase: /[A-Z]/.test(password),
+                    number: /[0-9]/.test(password),
+                    special: /[!@#$%^&*]/.test(password)
+                };
+
+                // Update requirement indicators
+                document.getElementById('req-length').className = requirements.length ? 'valid' : '';
+                document.getElementById('req-lowercase').className = requirements.lowercase ? 'valid' : '';
+                document.getElementById('req-uppercase').className = requirements.uppercase ? 'valid' : '';
+                document.getElementById('req-number').className = requirements.number ? 'valid' : '';
+                document.getElementById('req-special').className = requirements.special ? 'valid' : '';
+
+                // Update requirement text
+                document.getElementById('req-length').innerHTML = requirements.length ? '✓ 6-20 characters' : '✗ 6-20 characters';
+                document.getElementById('req-lowercase').innerHTML = requirements.lowercase ? '✓ 1 lowercase letter' : '✗ 1 lowercase letter';
+                document.getElementById('req-uppercase').innerHTML = requirements.uppercase ? '✓ 1 uppercase letter' : '✗ 1 uppercase letter';
+                document.getElementById('req-number').innerHTML = requirements.number ? '✓ 1 number' : '✗ 1 number';
+                document.getElementById('req-special').innerHTML = requirements.special ? '✓ 1 special character (!@#$%^&*)' : '✗ 1 special character (!@#$%^&*)';
+            });
+        }
+
+        // Confirm password validation
+        const confirmPassword = document.getElementById('confirm-password');
+        if (confirmPassword && signupPassword) {
+            confirmPassword.addEventListener('input', function() {
+                const error = document.getElementById('confirm-password-error');
+                if (this.value !== signupPassword.value) {
+                    error.textContent = 'Passwords do not match';
+                    error.style.display = 'block';
+                } else {
+                    error.textContent = '';
+                    error.style.display = 'none';
+                }
+            });
+        }
+
+        // Username validation
+        const signupUsername = document.getElementById('signup-username');
+        if (signupUsername) {
+            signupUsername.addEventListener('input', function() {
+                const username = this.value;
+                const error = document.getElementById('username-error');
+                
+                if (username.length < 3) {
+                    error.textContent = 'Username must be at least 3 characters';
+                    error.style.display = 'block';
+                } else if (username.length > 20) {
+                    error.textContent = 'Username must be less than 20 characters';
+                    error.style.display = 'block';
+                } else if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+                    error.textContent = 'Username can only contain letters, numbers, and underscores';
+                    error.style.display = 'block';
+                } else {
+                    error.textContent = '';
+                    error.style.display = 'none';
+                }
+            });
+        }
+
+        // Email validation
+        const signupEmail = document.getElementById('signup-email');
+        if (signupEmail) {
+            signupEmail.addEventListener('input', function() {
+                const email = this.value;
+                const error = document.getElementById('email-error');
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                
+                if (!emailRegex.test(email)) {
+                    error.textContent = 'Please enter a valid email address';
+                    error.style.display = 'block';
+                } else {
+                    error.textContent = '';
+                    error.style.display = 'none';
+                }
+            });
+        }
+
+        // Check for logout success message
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('logout') === 'success') {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'success-message';
+            messageDiv.textContent = 'You have been successfully logged out.';
+            messageDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #4CAF50; color: white; padding: 15px 20px; border-radius: 5px; z-index: 10000; box-shadow: 0 2px 10px rgba(0,0,0,0.2);';
+            document.body.appendChild(messageDiv);
+            
+            setTimeout(() => {
+                messageDiv.style.opacity = '0';
+                messageDiv.style.transition = 'opacity 0.5s';
+                setTimeout(() => messageDiv.remove(), 500);
+            }, 3000);
+        }
+
+        console.log('=== LOGIN PAGE SCRIPT COMPLETE ===');
+    </script>
+</body>
+</html>
