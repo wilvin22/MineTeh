@@ -1,6 +1,12 @@
 <?php
 session_start();
+
+// Set timezone to Philippines
+date_default_timezone_set('Asia/Manila');
+
+include '../config.php';
 include '../database/supabase.php';
+include '../database/notifications_helper.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../login.php");
@@ -9,51 +15,97 @@ if (!isset($_SESSION['user_id'])) {
 
 $user_id = $_SESSION['user_id'];
 
+// Handle status update
+if (isset($_POST['update_status'])) {
+    $order_id = (int)$_POST['order_id'];
+    $new_status = $_POST['new_status'];
+    
+    // Verify seller owns this order
+    $order = $supabase->select('orders', '*', ['order_id' => $order_id, 'seller_id' => $user_id], true);
+    
+    if ($order) {
+        // Update order status
+        $result = $supabase->update('orders', 
+            ['order_status' => $new_status, 'updated_at' => date('Y-m-d H:i:s')], 
+            ['order_id' => $order_id]
+        );
+        
+        if ($result) {
+            // Get listing details for notification
+            $listing = $supabase->select('listings', 'title', ['id' => $order['listing_id']], true);
+            
+            // Notify buyer of status change
+            $notificationHelper = new NotificationsHelper();
+            $notificationHelper->notifyOrderUpdate(
+                $order['buyer_id'],
+                $order_id,
+                $new_status,
+                $listing['title']
+            );
+            
+            $success_message = "Order status updated successfully!";
+        }
+    }
+}
+
 // Determine view mode (buyer or seller)
 $view_mode = isset($_GET['view']) ? $_GET['view'] : 'buyer';
 
-if ($view_mode === 'seller') {
-    // Get all orders where user is the seller
-    $orders = $supabase->customQuery('orders', '*', 'seller_id=eq.' . $user_id . '&order=created_at.desc');
-} else {
-    // Get all orders where user is the buyer
-    $orders = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id . '&order=created_at.desc');
+// Count pending orders for badges
+$buyer_pending_count = 0;
+$seller_new_count = 0;
+
+// Get buyer pending orders count
+$buyer_orders = $supabase->customQuery('orders', 'order_id,order_status', 'buyer_id=eq.' . $user_id);
+if (!empty($buyer_orders)) {
+    foreach ($buyer_orders as $order) {
+        if ($order['order_status'] === 'processing' || $order['order_status'] === 'shipped') {
+            $buyer_pending_count++;
+        }
+    }
 }
 
-// Organize orders by status
-$pending_orders = [];
-$completed_orders = [];
-$cancelled_orders = [];
+// Get seller new orders count
+$seller_orders = $supabase->customQuery('orders', 'order_id,order_status', 'seller_id=eq.' . $user_id);
+if (!empty($seller_orders)) {
+    foreach ($seller_orders as $order) {
+        if ($order['order_status'] === 'pending' || $order['order_status'] === 'processing') {
+            $seller_new_count++;
+        }
+    }
+}
 
+// Fetch orders based on view mode
+if ($view_mode === 'seller') {
+    $orders = $supabase->customQuery('orders', '*', 'seller_id=eq.' . $user_id . '&order=order_date.desc');
+} else {
+    $orders = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id . '&order=order_date.desc');
+}
+
+// Process orders and get related data
+$processed_orders = [];
 if (!empty($orders)) {
     foreach ($orders as $order) {
         // Get listing details
         $listing = $supabase->select('listings', '*', ['id' => $order['listing_id']], true);
         
         if ($listing) {
-            // Get first image
+            // Get listing image
             $images = $supabase->select('listing_images', 'image_path', ['listing_id' => $listing['id']]);
-            $listing['image'] = !empty($images) ? $images[0]['image_path'] : '../assets/no-image.png';
+            $order['image'] = !empty($images) ? getImageUrl($images[0]['image_path']) : BASE_URL . '/assets/no-image.png';
             
-            // Get other party info (buyer or seller depending on view mode)
+            // Get other party info
             if ($view_mode === 'seller') {
-                $other_party = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['buyer_id']], true);
-                $order['buyer_name'] = $other_party ? $other_party['username'] : 'Unknown';
+                $buyer = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['buyer_id']], true);
+                $order['other_party'] = $buyer ? $buyer['username'] : 'Unknown';
             } else {
-                $other_party = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['seller_id']], true);
-                $order['seller_name'] = $other_party ? $other_party['username'] : 'Unknown';
+                $seller = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $order['seller_id']], true);
+                $order['other_party'] = $seller ? $seller['username'] : 'Unknown';
             }
             
-            $order['listing'] = $listing;
-            
-            // Categorize by status
-            if ($order['status'] === 'pending') {
-                $pending_orders[] = $order;
-            } elseif ($order['status'] === 'completed') {
-                $completed_orders[] = $order;
-            } else {
-                $cancelled_orders[] = $order;
-            }
+            $order['listing_title'] = $listing['title'];
+            $order['listing_location'] = $listing['location'];
+            $processed_orders[] = $order;
         }
     }
 }
@@ -67,24 +119,26 @@ if (!empty($orders)) {
     <link rel="stylesheet" href="../sidebar/sidebar.css">
     <style>
         body {
-            background: #f5f5f5;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
         }
 
         .orders-container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 30px;
+            padding: 30px 20px;
         }
 
         .page-header {
-            margin-bottom: 30px;
+            text-align: center;
+            margin-bottom: 40px;
         }
 
         .page-title {
             font-size: 36px;
             font-weight: bold;
             color: #333;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .page-subtitle {
@@ -92,58 +146,51 @@ if (!empty($orders)) {
             color: #666;
         }
 
-        .tabs-container {
+        .view-toggle {
             display: flex;
-            gap: 12px;
+            justify-content: center;
+            gap: 15px;
             margin-bottom: 30px;
-            border-bottom: 2px solid #e9ecef;
-            padding-bottom: 0;
         }
 
-        .tab-button {
-            padding: 12px 24px;
-            background: transparent;
-            border: none;
-            border-bottom: 3px solid transparent;
-            font-size: 16px;
-            font-weight: 600;
-            color: #666;
+        .toggle-btn {
+            padding: 12px 30px;
+            border: 2px solid #945a9b;
+            background: white;
+            color: #945a9b;
+            border-radius: 25px;
+            font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
+            text-decoration: none;
             position: relative;
-            bottom: -2px;
         }
 
-        .tab-button:hover {
-            color: #945a9b;
+        .toggle-btn:hover {
+            background: #f8f4f9;
+            transform: translateY(-2px);
         }
 
-        .tab-button.active {
-            color: #945a9b;
-            border-bottom-color: #945a9b;
-        }
-
-        .tab-badge {
-            display: inline-block;
-            background: #e9ecef;
-            color: #666;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            margin-left: 6px;
-        }
-
-        .tab-button.active .tab-badge {
+        .toggle-btn.active {
             background: #945a9b;
             color: white;
         }
 
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
+        .badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: #e74c3c;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
         .orders-list {
@@ -154,48 +201,56 @@ if (!empty($orders)) {
 
         .order-card {
             background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             transition: all 0.3s ease;
         }
 
         .order-card:hover {
-            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
         }
 
         .order-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
+            margin-bottom: 20px;
             padding-bottom: 15px;
-            border-bottom: 1px solid #e9ecef;
-            margin-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
         }
 
         .order-id {
-            font-size: 14px;
-            color: #666;
+            font-weight: bold;
+            color: #333;
+            font-size: 16px;
         }
 
         .order-date {
+            color: #666;
             font-size: 14px;
-            color: #999;
         }
 
         .order-status {
-            padding: 6px 12px;
+            padding: 6px 16px;
             border-radius: 20px;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: bold;
+            text-transform: capitalize;
         }
 
-        .status-pending {
+        .status-pending, .status-processing {
             background: #fff3cd;
             color: #856404;
         }
 
-        .status-completed {
+        .status-shipped {
+            background: #cfe2ff;
+            color: #084298;
+        }
+
+        .status-delivered, .status-completed {
             background: #d1e7dd;
             color: #0f5132;
         }
@@ -213,53 +268,59 @@ if (!empty($orders)) {
         .order-image {
             width: 120px;
             height: 120px;
-            border-radius: 8px;
             object-fit: cover;
+            border-radius: 12px;
             flex-shrink: 0;
         }
 
         .order-details {
-            flex-grow: 1;
+            flex: 1;
         }
 
         .order-title {
             font-size: 18px;
             font-weight: bold;
             color: #333;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
         }
 
         .order-info {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            font-size: 14px;
+            gap: 8px;
             color: #666;
+            font-size: 14px;
+        }
+
+        .order-info-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .order-price {
-            font-size: 20px;
+            font-size: 24px;
             font-weight: bold;
             color: #945a9b;
-            margin-top: 10px;
+            text-align: right;
         }
 
         .order-actions {
             display: flex;
             gap: 10px;
             margin-top: 15px;
+            justify-content: flex-end;
         }
 
         .btn {
-            padding: 8px 16px;
-            border: none;
+            padding: 10px 20px;
             border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
+            font-weight: bold;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             text-decoration: none;
-            display: inline-block;
+            border: none;
+            font-size: 14px;
         }
 
         .btn-primary {
@@ -283,40 +344,79 @@ if (!empty($orders)) {
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: #999;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
-        .empty-state-icon {
+        .empty-icon {
             font-size: 64px;
             margin-bottom: 20px;
         }
 
-        .empty-state h3 {
+        .empty-title {
             font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .empty-text {
             color: #666;
-            margin-bottom: 8px;
+            margin-bottom: 20px;
         }
 
-        .empty-state p {
-            font-size: 16px;
-            color: #999;
+        .delivery-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
         }
 
-        .browse-btn {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 12px 24px;
-            background: #945a9b;
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.3s ease;
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
         }
 
-        .browse-btn:hover {
-            background: #6a406e;
-            transform: translateY(-2px);
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .close-modal {
+            font-size: 28px;
+            cursor: pointer;
+            color: #666;
+            background: none;
+            border: none;
+        }
+
+        .address-content {
+            white-space: pre-line;
+            line-height: 1.8;
+            color: #333;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
         }
 
         @media (max-width: 768px) {
@@ -328,6 +428,23 @@ if (!empty($orders)) {
                 width: 100%;
                 height: 200px;
             }
+
+            .order-price {
+                text-align: left;
+                margin-top: 15px;
+            }
+
+            .order-actions {
+                justify-content: flex-start;
+            }
+
+            .view-toggle {
+                flex-direction: column;
+            }
+
+            .toggle-btn {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -337,232 +454,190 @@ if (!empty($orders)) {
     <div class="main-wrapper">
         <div class="orders-container">
             <div class="page-header">
-                <div class="page-title">📦 Your Orders</div>
-                <div class="page-subtitle">Track and manage all your <?php echo $view_mode === 'seller' ? 'sales' : 'purchases'; ?></div>
+                <h1 class="page-title">📦 Your Orders</h1>
+                <p class="page-subtitle">Track and manage your orders</p>
             </div>
 
-            <!-- View Mode Toggle -->
-            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-                <a href="?view=buyer" class="btn <?php echo $view_mode === 'buyer' ? 'btn-primary' : 'btn-secondary'; ?>" style="text-decoration: none;">
-                    🛍️ My Purchases
+            <?php if (isset($success_message)): ?>
+                <div style="background: #d1e7dd; color: #0f5132; padding: 15px; border-radius: 12px; margin-bottom: 20px; text-align: center;">
+                    ✓ <?php echo $success_message; ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="view-toggle">
+                <a href="?view=buyer" class="toggle-btn <?php echo $view_mode === 'buyer' ? 'active' : ''; ?>">
+                    🛒 My Purchases
+                    <?php if ($buyer_pending_count > 0): ?>
+                        <span class="badge"><?php echo $buyer_pending_count; ?></span>
+                    <?php endif; ?>
                 </a>
-                <a href="?view=seller" class="btn <?php echo $view_mode === 'seller' ? 'btn-primary' : 'btn-secondary'; ?>" style="text-decoration: none;">
+                <a href="?view=seller" class="toggle-btn <?php echo $view_mode === 'seller' ? 'active' : ''; ?>">
                     💰 My Sales
+                    <?php if ($seller_new_count > 0): ?>
+                        <span class="badge"><?php echo $seller_new_count; ?></span>
+                    <?php endif; ?>
                 </a>
             </div>
 
-            <div class="tabs-container">
-                <button class="tab-button active" onclick="showTab('pending')">
-                    ⏳ Pending
-                    <span class="tab-badge"><?php echo count($pending_orders); ?></span>
-                </button>
-                <button class="tab-button" onclick="showTab('completed')">
-                    ✅ Completed
-                    <span class="tab-badge"><?php echo count($completed_orders); ?></span>
-                </button>
-                <button class="tab-button" onclick="showTab('cancelled')">
-                    ❌ Cancelled
-                    <span class="tab-badge"><?php echo count($cancelled_orders); ?></span>
-                </button>
-            </div>
-
-            <!-- Pending Orders Tab -->
-            <div id="pending-tab" class="tab-content active">
-                <?php if (empty($pending_orders)): ?>
-                    <div class="empty-state">
-                        <div class="empty-state-icon">⏳</div>
-                        <h3>No Pending Orders</h3>
-                        <p>You don't have any pending orders</p>
-                        <a href="homepage.php" class="browse-btn">Start Shopping</a>
-                    </div>
-                <?php else: ?>
-                    <div class="orders-list">
-                        <?php foreach ($pending_orders as $order): ?>
-                            <div class="order-card">
-                                <div class="order-header">
-                                    <div>
-                                        <span class="order-id">Order #<?php echo $order['order_id']; ?></span>
-                                        <span class="order-status status-pending">Pending</span>
-                                    </div>
+            <?php if (empty($processed_orders)): ?>
+                <div class="empty-state">
+                    <div class="empty-icon">📭</div>
+                    <h2 class="empty-title">No Orders Yet</h2>
+                    <p class="empty-text">
+                        <?php if ($view_mode === 'buyer'): ?>
+                            You haven't made any purchases yet. Start shopping now!
+                        <?php else: ?>
+                            You haven't received any orders yet. Keep your listings active!
+                        <?php endif; ?>
+                    </p>
+                    <a href="homepage.php" class="btn btn-primary">Browse Listings</a>
+                </div>
+            <?php else: ?>
+                <div class="orders-list">
+                    <?php foreach ($processed_orders as $order): ?>
+                        <div class="order-card">
+                            <div class="order-header">
+                                <div>
+                                    <div class="order-id">Order #<?php echo $order['order_id']; ?></div>
                                     <div class="order-date">
-                                        <?php echo date('M d, Y', strtotime($order['created_at'])); ?>
+                                        <?php echo date('M d, Y g:i A', strtotime($order['order_date'])); ?>
                                     </div>
                                 </div>
-                                <div class="order-content">
-                                    <img src="<?php echo htmlspecialchars($order['listing']['image']); ?>" 
-                                         alt="<?php echo htmlspecialchars($order['listing']['title']); ?>" 
-                                         class="order-image">
-                                    <div class="order-details">
-                                        <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
-                                        <div class="order-info">
-                                            <?php if ($view_mode === 'seller'): ?>
-                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
-                                            <?php else: ?>
-                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
-                                            <?php endif; ?>
-                                            <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
-                                            <div>📅 Ordered: <?php echo date('M d, Y g:i A', strtotime($order['created_at'])); ?></div>
-                                            <div>💳 Payment: <?php echo ucfirst($order['payment_method']); ?> (<?php echo ucfirst($order['payment_status']); ?>)</div>
-                                            <div>🚚 Delivery: <?php echo ucfirst($order['delivery_method']); ?></div>
+                                <span class="order-status status-<?php echo strtolower($order['order_status']); ?>">
+                                    <?php echo ucfirst($order['order_status']); ?>
+                                </span>
+                            </div>
+
+                            <div class="order-content">
+                                <img src="<?php echo htmlspecialchars($order['image']); ?>" 
+                                     alt="<?php echo htmlspecialchars($order['listing_title']); ?>" 
+                                     class="order-image">
+                                
+                                <div class="order-details">
+                                    <h3 class="order-title"><?php echo htmlspecialchars($order['listing_title']); ?></h3>
+                                    
+                                    <div class="order-info">
+                                        <div class="order-info-item">
+                                            <span>👤</span>
+                                            <span>
+                                                <?php if ($view_mode === 'buyer'): ?>
+                                                    Seller: <?php echo htmlspecialchars($order['other_party']); ?>
+                                                <?php else: ?>
+                                                    Buyer: <?php echo htmlspecialchars($order['other_party']); ?>
+                                                <?php endif; ?>
+                                            </span>
                                         </div>
-                                        <div class="order-price">₱<?php echo number_format($order['total_amount'], 2); ?></div>
-                                        <div class="order-actions">
-                                            <a href="listing-details.php?id=<?php echo $order['listing_id']; ?>" class="btn btn-primary">View Item</a>
-                                            <?php if ($view_mode === 'seller'): ?>
-                                                <button class="btn btn-secondary" onclick="viewDeliveryAddress(<?php echo $order['order_id']; ?>)">View Address</button>
-                                            <?php endif; ?>
+                                        <div class="order-info-item">
+                                            <span>📍</span>
+                                            <span><?php echo htmlspecialchars($order['listing_location']); ?></span>
                                         </div>
+                                        <div class="order-info-item">
+                                            <span>💳</span>
+                                            <span>Payment: <?php echo ucfirst($order['payment_method']); ?> (<?php echo ucfirst($order['payment_status']); ?>)</span>
+                                        </div>
+                                        <div class="order-info-item">
+                                            <span>🚚</span>
+                                            <span>Delivery: <?php echo ucfirst($order['delivery_method']); ?></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="order-price">₱<?php echo number_format($order['order_amount'], 2); ?></div>
+
+                                    <div class="order-actions">
+                                        <a href="listing-details.php?id=<?php echo $order['listing_id']; ?>" class="btn btn-primary">
+                                            View Item
+                                        </a>
+                                        <?php if ($view_mode === 'seller'): ?>
+                                            <button class="btn btn-secondary" onclick="viewDeliveryAddress(<?php echo $order['order_id']; ?>, '<?php echo htmlspecialchars(addslashes($order['delivery_address'])); ?>')">
+                                                View Address
+                                            </button>
+                                            <button class="btn btn-primary" onclick="updateOrderStatus(<?php echo $order['order_id']; ?>, '<?php echo $order['order_status']; ?>')">
+                                                Update Status
+                                            </button>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
                             </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
-            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
 
-            <!-- Completed Orders Tab -->
-            <div id="completed-tab" class="tab-content">
-                <?php if (empty($completed_orders)): ?>
-                    <div class="empty-state">
-                        <div class="empty-state-icon">✅</div>
-                        <h3>No Completed Orders</h3>
-                        <p>You haven't completed any orders yet</p>
-                        <a href="homepage.php" class="browse-btn">Start Shopping</a>
-                    </div>
-                <?php else: ?>
-                    <div class="orders-list">
-                        <?php foreach ($completed_orders as $order): ?>
-                            <div class="order-card">
-                                <div class="order-header">
-                                    <div>
-                                        <span class="order-id">Order #<?php echo $order['order_id']; ?></span>
-                                        <span class="order-status status-completed">Completed</span>
-                                    </div>
-                                    <div class="order-date">
-                                        <?php echo date('M d, Y', strtotime($order['created_at'])); ?>
-                                    </div>
-                                </div>
-                                <div class="order-content">
-                                    <img src="<?php echo htmlspecialchars($order['listing']['image']); ?>" 
-                                         alt="<?php echo htmlspecialchars($order['listing']['title']); ?>" 
-                                         class="order-image">
-                                    <div class="order-details">
-                                        <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
-                                        <div class="order-info">
-                                            <?php if ($view_mode === 'seller'): ?>
-                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
-                                            <?php else: ?>
-                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
-                                            <?php endif; ?>
-                                            <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
-                                            <div>📅 Completed: <?php echo date('M d, Y g:i A', strtotime($order['updated_at'])); ?></div>
-                                            <div>💳 Payment: <?php echo ucfirst($order['payment_method']); ?> (<?php echo ucfirst($order['payment_status']); ?>)</div>
-                                        </div>
-                                        <div class="order-price">₱<?php echo number_format($order['total_amount'], 2); ?></div>
-                                        <div class="order-actions">
-                                            <a href="listing-details.php?id=<?php echo $order['listing_id']; ?>" class="btn btn-secondary">View Item</a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
+    <!-- Delivery Address Modal -->
+    <div id="deliveryModal" class="delivery-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">📍 Delivery Address</h2>
+                <button class="close-modal" onclick="closeModal()">&times;</button>
             </div>
+            <div id="addressContent" class="address-content"></div>
+        </div>
+    </div>
 
-            <!-- Cancelled Orders Tab -->
-            <div id="cancelled-tab" class="tab-content">
-                <?php if (empty($cancelled_orders)): ?>
-                    <div class="empty-state">
-                        <div class="empty-state-icon">❌</div>
-                        <h3>No Cancelled Orders</h3>
-                        <p>You haven't cancelled any orders</p>
-                        <a href="homepage.php" class="browse-btn">Start Shopping</a>
-                    </div>
-                <?php else: ?>
-                    <div class="orders-list">
-                        <?php foreach ($cancelled_orders as $order): ?>
-                            <div class="order-card">
-                                <div class="order-header">
-                                    <div>
-                                        <span class="order-id">Order #<?php echo $order['order_id']; ?></span>
-                                        <span class="order-status status-cancelled">Cancelled</span>
-                                    </div>
-                                    <div class="order-date">
-                                        <?php echo date('M d, Y', strtotime($order['created_at'])); ?>
-                                    </div>
-                                </div>
-                                <div class="order-content">
-                                    <img src="<?php echo htmlspecialchars($order['listing']['image']); ?>" 
-                                         alt="<?php echo htmlspecialchars($order['listing']['title']); ?>" 
-                                         class="order-image">
-                                    <div class="order-details">
-                                        <div class="order-title"><?php echo htmlspecialchars($order['listing']['title']); ?></div>
-                                        <div class="order-info">
-                                            <?php if ($view_mode === 'seller'): ?>
-                                                <div>👤 Buyer: <?php echo htmlspecialchars($order['buyer_name']); ?></div>
-                                            <?php else: ?>
-                                                <div>👤 Seller: <?php echo htmlspecialchars($order['seller_name']); ?></div>
-                                            <?php endif; ?>
-                                            <div>📍 <?php echo htmlspecialchars($order['listing']['location']); ?></div>
-                                            <div>📅 Cancelled: <?php echo date('M d, Y g:i A', strtotime($order['updated_at'])); ?></div>
-                                        </div>
-                                        <div class="order-price">₱<?php echo number_format($order['total_amount'], 2); ?></div>
-                                        <div class="order-actions">
-                                            <a href="listing-details.php?id=<?php echo $order['listing_id']; ?>" class="btn btn-secondary">View Item</a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endif; ?>
+    <!-- Update Status Modal -->
+    <div id="statusModal" class="delivery-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">📦 Update Order Status</h2>
+                <button class="close-modal" onclick="closeStatusModal()">&times;</button>
             </div>
+            <form method="POST" action="">
+                <input type="hidden" name="order_id" id="statusOrderId">
+                <div style="margin-bottom: 20px;">
+                    <label style="display: block; font-weight: bold; margin-bottom: 10px;">Select New Status:</label>
+                    <select name="new_status" id="newStatus" style="width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        <option value="processing">Processing</option>
+                        <option value="shipped">Shipped</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" name="update_status" class="btn btn-primary" style="flex: 1;">
+                        Update Status
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeStatusModal()">
+                        Cancel
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
     <script>
-        // Store delivery addresses for modal
-        const deliveryAddresses = {
-            <?php 
-            if (!empty($orders)) {
-                foreach ($orders as $order) {
-                    echo '"' . $order['order_id'] . '": ' . json_encode($order['delivery_address']) . ',';
-                }
-            }
-
-            if (!empty($address_items)) {
-                echo implode(',', $address_items);
-            }
-            ?>
-            };
-
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            
-            // Remove active from all buttons
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.add('active');
-            
-            // Add active to clicked button
-            event.target.classList.add('active');
+        function viewDeliveryAddress(orderId, address) {
+            document.getElementById('addressContent').textContent = address;
+            document.getElementById('deliveryModal').style.display = 'flex';
         }
 
-        function viewDeliveryAddress(orderId) {
-            const address = deliveryAddresses[orderId];
-            if (address) {
-                alert('Delivery Address:\n\n' + address);
-            } else {
-                alert('Address not found');
-            }
+        function closeModal() {
+            document.getElementById('deliveryModal').style.display = 'none';
         }
+
+        function updateOrderStatus(orderId, currentStatus) {
+            document.getElementById('statusOrderId').value = orderId;
+            document.getElementById('newStatus').value = currentStatus;
+            document.getElementById('statusModal').style.display = 'flex';
+        }
+
+        function closeStatusModal() {
+            document.getElementById('statusModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('deliveryModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.getElementById('statusModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeStatusModal();
+            }
+        });
     </script>
 </body>
 </html>

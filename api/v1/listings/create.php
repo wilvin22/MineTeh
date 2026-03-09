@@ -167,6 +167,14 @@ if ($uploadedCount === 0) {
 // Get the created listing with images
 $newListing = $supabase->select('listings', '*', ['id' => $listingId], true);
 $images = $supabase->select('listing_images', 'image_path', ['listing_id' => $listingId]);
+
+// Convert image paths to absolute URLs
+if ($images && !empty($images)) {
+    foreach ($images as &$image) {
+        $image['image_path'] = getImageUrl($image['image_path']);
+    }
+}
+
 $newListing['images'] = $images;
 
 error_log("Listing created successfully with $uploadedCount images");

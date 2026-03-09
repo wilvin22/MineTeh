@@ -114,18 +114,53 @@ if (isset($_POST['log-in'])) {
                 $user = $user[0];
 
                 if (password_verify($password, $user['password_hash'])) {
-                    // Correct login, set session
-                    $_SESSION['user_id'] = $user['account_id'];
-                    $_SESSION['username'] = $user['username'];
-                    $_SESSION['is_admin'] = $user['is_admin'] ?? false;
+                    // Check user status
+                    $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
                     
-                    // redirect based on role
-                    if ($user['is_admin']) {
-                        header("Location: admin-dashboard.php");
+                    if ($user_status === 'banned') {
+                        $reason = isset($user['status_reason']) ? $user['status_reason'] : 'No reason provided';
+                        $error_message = "Your account has been banned. Reason: " . htmlspecialchars($reason);
+                    } elseif ($user_status === 'restricted') {
+                        // Check if restriction has expired
+                        $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+                        if ($restriction_until && strtotime($restriction_until) <= time()) {
+                            // Restriction expired, reactivate user
+                            $supabase->update('accounts', [
+                                'user_status' => 'active',
+                                'restriction_until' => null,
+                                'status_reason' => null
+                            ], ['account_id' => $user['account_id']]);
+                            $user_status = 'active';
+                        }
+                        
+                        // Allow login for restricted users
+                        $_SESSION['user_id'] = $user['account_id'];
+                        $_SESSION['username'] = $user['username'];
+                        $_SESSION['is_admin'] = $user['is_admin'] ?? false;
+                        $_SESSION['user_status'] = $user_status;
+                        
+                        // redirect based on role
+                        if ($user['is_admin']) {
+                            header("Location: admin-dashboard.php");
+                        } else {
+                            header("Location: home/homepage.php");
+                        }
+                        exit;
                     } else {
-                        header("Location: home/homepage.php");
+                        // Active user, allow login
+                        $_SESSION['user_id'] = $user['account_id'];
+                        $_SESSION['username'] = $user['username'];
+                        $_SESSION['is_admin'] = $user['is_admin'] ?? false;
+                        $_SESSION['user_status'] = $user_status;
+                        
+                        // redirect based on role
+                        if ($user['is_admin']) {
+                            header("Location: admin-dashboard.php");
+                        } else {
+                            header("Location: home/homepage.php");
+                        }
+                        exit;
                     }
-                    exit;
 
                 } else {
                     $error_message = "Incorrect password! Please check your password and try again.";
@@ -739,7 +774,7 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
                         </button>
                     </div>
                     <div class="forgot-password">
-                        <a href="#" onclick="alert('Password reset feature coming soon!'); return false;">Forgot Password?</a>
+                        <a href="forgot-password.php">Forgot Password?</a>
                     </div>
                 </div>
 

@@ -105,7 +105,7 @@ foreach ($listings as &$listing) {
     
     // Attach first image
     $listing['image'] = isset($allImages[$listingId]) && !empty($allImages[$listingId]) 
-        ? $allImages[$listingId][0] 
+        ? getImageUrl($allImages[$listingId][0])
         : null;
     
     // Attach seller info

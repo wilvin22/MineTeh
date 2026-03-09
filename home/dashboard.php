@@ -21,8 +21,8 @@ $pending_purchases = 0;
 
 if (!empty($purchases) && is_array($purchases)) {
     foreach ($purchases as $purchase) {
-        $total_spent += isset($purchase['total_amount']) ? floatval($purchase['total_amount']) : 0;
-        if (isset($purchase['status']) && $purchase['status'] === 'pending') {
+        $total_spent += isset($purchase['order_amount']) ? floatval($purchase['order_amount']) : 0;
+        if (isset($purchase['order_status']) && $purchase['order_status'] === 'pending') {
             $pending_purchases++;
         }
     }
@@ -74,8 +74,8 @@ $pending_sales = 0;
 
 if (!empty($sales) && is_array($sales)) {
     foreach ($sales as $sale) {
-        $total_revenue += isset($sale['total_amount']) ? floatval($sale['total_amount']) : 0;
-        if (isset($sale['status']) && $sale['status'] === 'pending') {
+        $total_revenue += isset($sale['order_amount']) ? floatval($sale['order_amount']) : 0;
+        if (isset($sale['order_status']) && $sale['order_status'] === 'pending') {
             $pending_sales++;
         }
     }
@@ -520,7 +520,7 @@ if (!empty($user_convs) && is_array($user_convs)) {
                                         </div>
                                     </div>
                                     <div style="font-weight: bold; color: #945a9b;">
-                                        ₱<?php echo number_format($purchase['total_amount'], 2); ?>
+                                        ₱<?php echo number_format($purchase['order_amount'], 2); ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -546,7 +546,7 @@ if (!empty($user_convs) && is_array($user_convs)) {
                                         </div>
                                     </div>
                                     <div style="font-weight: bold; color: #28a745;">
-                                        +₱<?php echo number_format($sale['total_amount'], 2); ?>
+                                        +₱<?php echo number_format($sale['order_amount'], 2); ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>

@@ -7,6 +7,29 @@ if (!isset($_SESSION['user_id'])) {
     die("Login required");
 }
 
+// Check if user is restricted
+$user_status = isset($_SESSION['user_status']) ? $_SESSION['user_status'] : 'active';
+if ($user_status === 'restricted') {
+    // Get user details to check restriction expiry
+    $user = $supabase->select('accounts', 'restriction_until, status_reason', ['account_id' => $_SESSION['user_id']], true);
+    
+    $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+    
+    if ($restriction_until && strtotime($restriction_until) <= time()) {
+        // Restriction expired, reactivate user
+        $supabase->update('accounts', [
+            'user_status' => 'active',
+            'restriction_until' => null,
+            'status_reason' => null
+        ], ['account_id' => $_SESSION['user_id']]);
+        $_SESSION['user_status'] = 'active';
+    } else {
+        // Redirect to homepage with error message
+        header("Location: ../home/homepage.php?error=restricted");
+        exit;
+    }
+}
+
 $notificationHelper = new NotificationsHelper();
 
 if (isset($_POST['place_bid'])) {
@@ -41,6 +64,26 @@ if (isset($_POST['place_bid'])) {
         if ($now > $end_time) {
             die("Auction has ended");
         }
+    }
+
+    // Get highest current bid
+    $highest_bid = $supabase->customQuery('bids', '*', 
+        'listing_id=eq.' . $listing_id . '&order=bid_amount.desc&limit=1');
+    
+    // Calculate minimum required bid
+    $min_bid_increment = isset($listing['min_bid_increment']) ? floatval($listing['min_bid_increment']) : 1.00;
+    $starting_price = isset($listing['starting_price']) ? floatval($listing['starting_price']) : floatval($listing['price']);
+    
+    if (!empty($highest_bid) && is_array($highest_bid)) {
+        $min_required_bid = floatval($highest_bid[0]['bid_amount']) + $min_bid_increment;
+    } else {
+        $min_required_bid = $starting_price;
+    }
+    
+    // Validate bid amount
+    if (floatval($bid_amount) < $min_required_bid) {
+        die("Bid amount must be at least ₱" . number_format($min_required_bid, 2) . 
+            " (minimum increment: ₱" . number_format($min_bid_increment, 2) . ")");
     }
 
     // Insert bid

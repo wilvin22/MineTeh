@@ -1,7 +1,49 @@
 <?php
 session_start();
 date_default_timezone_set('Asia/Manila');
+
+// Prevent browser caching of this page
+header("Cache-Control: no-cache, no-store, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+include '../config.php';
 include '../database/supabase.php';
+
+// Check if user is restricted
+$user_is_restricted = false;
+$debug_restriction_info = ""; // For debugging
+if (isset($_SESSION['user_id'])) {
+    $user = $supabase->select('accounts', '*', ['account_id' => $_SESSION['user_id']], true);
+    if ($user && is_array($user)) {
+        $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
+        $debug_restriction_info = "<!-- DEBUG: user_status=" . $user_status . " -->";
+        
+        if ($user_status === 'restricted') {
+            $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+            $debug_restriction_info .= "<!-- DEBUG: restriction_until=" . ($restriction_until ? $restriction_until : 'NULL') . " -->";
+            
+            // Check if restriction expired
+            if ($restriction_until && strtotime($restriction_until) <= time()) {
+                // Expired, reactivate
+                $supabase->update('accounts', [
+                    'user_status' => 'active',
+                    'restriction_until' => null,
+                    'status_reason' => null
+                ], ['account_id' => $_SESSION['user_id']]);
+                $_SESSION['user_status'] = 'active';
+                $debug_restriction_info .= "<!-- DEBUG: Restriction expired, reactivated -->";
+            } else {
+                $user_is_restricted = true;
+                $debug_restriction_info .= "<!-- DEBUG: user_is_restricted=TRUE -->";
+            }
+        }
+    } else {
+        $debug_restriction_info = "<!-- DEBUG: Could not fetch user from database -->";
+    }
+} else {
+    $debug_restriction_info = "<!-- DEBUG: No user logged in -->";
+}
 
 if (!isset($_GET['id'])) {
     header("Location: homepage.php");
@@ -62,6 +104,7 @@ $bids = [];
 $highest_bid = null;
 if ($listing['listing_type'] === 'BID') {
     $bids = $supabase->customQuery('bids', '*', 'listing_id=eq.' . $listing_id . '&order=bid_amount.desc');
+    
     if (!is_array($bids)) {
         $bids = [];
     }
@@ -86,6 +129,7 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($listing['title']); ?> - MineTeh</title>
+    <!-- Version: 2024-03-07-v2 - Restriction Check Active -->
     <link rel="stylesheet" href="../sidebar/sidebar.css">
     <style>
         body {
@@ -397,7 +441,10 @@ if (isset($_SESSION['user_id'])) {
     </style>
 </head>
 <body>
-    <?php include '../sidebar/sidebar.php'; ?>
+    <?php 
+    echo $debug_restriction_info; // Output debug info in HTML comments
+    include '../sidebar/sidebar.php'; 
+    ?>
     
     <div class="main-wrapper">
         <div class="listing-detail-container">
@@ -411,19 +458,19 @@ if (isset($_SESSION['user_id'])) {
                     <!-- Image Gallery -->
                     <div class="image-gallery">
                         <?php if (!empty($images)): ?>
-                            <img src="<?php echo htmlspecialchars($images[0]['image_path']); ?>" 
+                            <img src="<?php echo htmlspecialchars(getImageUrl($images[0]['image_path'])); ?>" 
                                  alt="<?php echo htmlspecialchars($listing['title']); ?>" 
                                  class="main-image" 
                                  id="mainImage">
                         <?php else: ?>
-                            <img src="../assets/no-image.png" alt="No image" class="main-image" id="mainImage">
+                            <img src="<?php echo getImageUrl(''); ?>" alt="No image" class="main-image" id="mainImage">
                         <?php endif; ?>
                     </div>
 
                     <?php if (count($images) > 1): ?>
                     <div class="image-thumbnails">
                         <?php foreach ($images as $index => $image): ?>
-                            <img src="<?php echo htmlspecialchars($image['image_path']); ?>" 
+                            <img src="<?php echo htmlspecialchars(getImageUrl($image['image_path'])); ?>" 
                                  alt="Thumbnail <?php echo $index + 1; ?>" 
                                  class="thumbnail <?php echo $index === 0 ? 'active' : ''; ?>"
                                  onclick="changeImage(this)">
@@ -550,7 +597,8 @@ if (isset($_SESSION['user_id'])) {
                             <h3>Place Your Bid</h3>
                             <?php 
                             $min_bid_increment = isset($listing['min_bid_increment']) ? floatval($listing['min_bid_increment']) : 1.00;
-                            $min_next_bid = $highest_bid ? $highest_bid['bid_amount'] + $min_bid_increment : $listing['starting_price'];
+                            $starting_price = isset($listing['starting_price']) ? floatval($listing['starting_price']) : floatval($listing['price']);
+                            $min_next_bid = $highest_bid ? floatval($highest_bid['bid_amount']) + $min_bid_increment : $starting_price;
                             
                             // Check if auction has ended
                             $auction_ended = false;
@@ -566,22 +614,30 @@ if (isset($_SESSION['user_id'])) {
                                     <p style="margin: 8px 0 0 0; font-size: 14px;">This auction is no longer accepting bids.</p>
                                 </div>
                             <?php elseif (isset($_SESSION['user_id']) && $_SESSION['user_id'] != $listing['seller_id']): ?>
-                                <form method="POST" action="../api/place-bid.php" class="bid-form">
-                                    <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
-                                    <input type="number" 
-                                           name="bid_amount" 
-                                           placeholder="Enter bid amount" 
-                                           min="<?php echo $min_next_bid; ?>"
-                                           step="<?php echo $min_bid_increment; ?>"
-                                           required>
-                                    <div style="font-size: 12px; color: #666; margin-top: 8px;">
-                                        Minimum bid: ₱<?php echo number_format($min_next_bid, 2); ?>
-                                        (increment: ₱<?php echo number_format($min_bid_increment, 2); ?>)
+                                <?php if ($user_is_restricted): ?>
+                                    <div style="text-align: center; padding: 20px; background: #fff3cd; color: #856404; border-radius: 8px;">
+                                        <strong>⚠️ Account Restricted</strong>
+                                        <p style="margin: 8px 0 0 0; font-size: 14px;">You cannot place bids while your account is restricted.</p>
+                                        <a href="homepage.php" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;">View Details</a>
                                     </div>
-                                    <button type="submit" name="place_bid" class="action-btn btn-primary">
-                                        Place Bid
-                                    </button>
-                                </form>
+                                <?php else: ?>
+                                    <form method="POST" action="../api/place-bid.php" class="bid-form">
+                                        <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
+                                        <input type="number" 
+                                               name="bid_amount" 
+                                               placeholder="Enter bid amount" 
+                                               min="<?php echo $min_next_bid; ?>"
+                                               step="<?php echo $min_bid_increment; ?>"
+                                               required>
+                                        <div style="font-size: 12px; color: #666; margin-top: 8px;">
+                                            Minimum bid: ₱<?php echo number_format($min_next_bid, 2); ?>
+                                            (increment: ₱<?php echo number_format($min_bid_increment, 2); ?>)
+                                        </div>
+                                        <button type="submit" name="place_bid" class="action-btn btn-primary">
+                                            Place Bid
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
                             <?php elseif (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $listing['seller_id']): ?>
                                 <a href="create-listing.php?edit=<?php echo $listing_id; ?>" 
                                    class="action-btn btn-primary" 

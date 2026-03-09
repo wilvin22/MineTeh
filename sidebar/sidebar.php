@@ -17,16 +17,6 @@
                 <span>🏠</span>&nbsp;&nbsp;Home / Explore
             </div>
         </a>
-        <a href="homepage.php">
-            <div class="navigation" id="explore">
-                <span>🏠</span>&nbsp;&nbsp;Home / Explore
-            </div>
-        </a>
-        <a href="homepage.php">
-            <div class="navigation" id="explore">
-                <span>🏠</span>&nbsp;&nbsp;Home / Explore
-            </div>
-        </a>
         <a href="bids.php">
             <div class="navigation" id="bids" style="position: relative;">
                 <span>💰</span>&nbsp;&nbsp;Your Bids
@@ -53,14 +43,14 @@
                                 $now = time();
                                 
                                 if ($end_time > $now) {
-                                    // Auction is still live, check if user is outbid
-                                    $highest_bid = $supabase->customQuery('bids', '*', 'listing_id=eq.' . $bid_listing['id'] . '&order=bid_amount.desc&limit=1');
+                                    // Auction is still live, check if user is outbid (using sidebar-specific variable)
+                                    $sidebar_highest_bid = $supabase->customQuery('bids', '*', 'listing_id=eq.' . $bid_listing['id'] . '&order=bid_amount.desc&limit=1');
                                     
-                                    if (!empty($highest_bid) && is_array($highest_bid)) {
-                                        $highest_bid = $highest_bid[0];
+                                    if (!empty($sidebar_highest_bid) && is_array($sidebar_highest_bid)) {
+                                        $sidebar_highest_bid = $sidebar_highest_bid[0];
                                         
                                         // If the highest bid is not from this user, they are outbid
-                                        if ($highest_bid['user_id'] != $_SESSION['user_id']) {
+                                        if ($sidebar_highest_bid['user_id'] != $_SESSION['user_id']) {
                                             $outbid_count++;
                                         }
                                     }
@@ -83,7 +73,7 @@
         </a>
         <a href="cart.php">
             <div class="navigation" id="cart">
-                <span>🛒</span>&nbsp;&nbsp;Your Cart
+                <span>�</span>&nbsp;&nbsp;Your Cart
             </div>
         </a>
         <a href="your-orders.php">
@@ -113,7 +103,7 @@
         <div class="nav-section-header">💬 Communication</div>
         <a href="notifications.php">
             <div class="navigation" id="notifications" style="position: relative;">
-                <span>🔔</span>&nbsp;&nbsp;Notifications
+                <span>�</span>&nbsp;&nbsp;Notifications
                 <?php
                 if (isset($_SESSION['user_id'])) {
                     if (!isset($supabase)) {

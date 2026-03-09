@@ -13,6 +13,97 @@ if (!isset($_SESSION['user_id'])) {
     die("You must be logged in");
 }
 
+// Check if user is restricted
+$user_status = isset($_SESSION['user_status']) ? $_SESSION['user_status'] : 'active';
+if ($user_status === 'restricted') {
+    // Get user details to check restriction expiry
+    $user = $supabase->select('accounts', 'restriction_until, status_reason', ['account_id' => $_SESSION['user_id']], true);
+    
+    $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+    $is_expired = false;
+    
+    if ($restriction_until && strtotime($restriction_until) <= time()) {
+        // Restriction expired, reactivate user
+        $supabase->update('accounts', [
+            'user_status' => 'active',
+            'restriction_until' => null,
+            'status_reason' => null
+        ], ['account_id' => $_SESSION['user_id']]);
+        $_SESSION['user_status'] = 'active';
+        $is_expired = true;
+    }
+    
+    if (!$is_expired) {
+        $reason = isset($user['status_reason']) ? $user['status_reason'] : 'No reason provided';
+        $until_text = $restriction_until ? ' until ' . date('F j, Y g:i A', strtotime($restriction_until)) : ' permanently';
+        
+        die('
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Account Restricted</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                }
+                .restriction-notice {
+                    background: white;
+                    padding: 40px;
+                    border-radius: 12px;
+                    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                    max-width: 500px;
+                    text-align: center;
+                }
+                .restriction-icon {
+                    font-size: 60px;
+                    margin-bottom: 20px;
+                }
+                h1 {
+                    color: #e74c3c;
+                    margin-bottom: 15px;
+                }
+                .reason {
+                    background: #fff3cd;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                    color: #856404;
+                }
+                .back-btn {
+                    display: inline-block;
+                    margin-top: 20px;
+                    padding: 12px 24px;
+                    background: #667eea;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 8px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="restriction-notice">
+                <div class="restriction-icon">⚠️</div>
+                <h1>Account Restricted</h1>
+                <p>Your account has been restricted' . $until_text . '.</p>
+                <div class="reason">
+                    <strong>Reason:</strong><br>
+                    ' . htmlspecialchars($reason) . '
+                </div>
+                <p>You cannot create listings while your account is restricted.</p>
+                <a href="homepage.php" class="back-btn">Back to Homepage</a>
+            </div>
+        </body>
+        </html>
+        ');
+    }
+}
+
 // Check if we're in edit mode
 $edit_mode = false;
 $listing_data = null;
@@ -159,7 +250,7 @@ if (isset($_POST['create_listing'])) {
         $listing_id = $result && !empty($result[0]) ? $result[0]['id'] : null;
     }
     if ($result && $listing_id) {
-        $upload_dir = "../uploads/";
+        $upload_dir = __DIR__ . "/uploads/";
         
         if (!is_dir($upload_dir)) {
             mkdir($upload_dir, 0777, true);
@@ -167,6 +258,7 @@ if (isset($_POST['create_listing'])) {
         
         $max_photos = 5;
         $uploaded = 0;
+        $upload_errors = []; // Track upload errors for debugging
 
         if (!empty($_FILES['photos']['name'][0])) {
             $allowed_mime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -175,24 +267,40 @@ if (isset($_POST['create_listing'])) {
             foreach ($_FILES['photos']['tmp_name'] as $key => $tmp_name) {
                 if ($uploaded >= $max_photos) break;
                 
-                if ($_FILES['photos']['error'][$key] !== 0 || !is_uploaded_file($tmp_name)) continue;
+                if ($_FILES['photos']['error'][$key] !== 0 || !is_uploaded_file($tmp_name)) {
+                    $upload_errors[] = "File $key: Upload error code " . $_FILES['photos']['error'][$key];
+                    continue;
+                }
 
                 $mime_type = finfo_file($finfo, $tmp_name);
-                if (!in_array($mime_type, $allowed_mime)) continue;
+                if (!in_array($mime_type, $allowed_mime)) {
+                    $upload_errors[] = "File $key: Invalid MIME type $mime_type";
+                    continue;
+                }
 
                 $file_ext = pathinfo($_FILES['photos']['name'][$key], PATHINFO_EXTENSION);
                 $file_name = uniqid('img_', true) . '.' . $file_ext;
-                $file_path = "../uploads/" . $file_name;
+                $file_path = __DIR__ . "/uploads/" . $file_name;
 
                 if (move_uploaded_file($tmp_name, $file_path)) {
+                    // Save only the relative path without ../ for database
+                    $db_path = "uploads/" . $file_name;
+                    
                     $supabase->insert('listing_images', [
                         'listing_id' => $listing_id,
-                        'image_path' => $file_path
+                        'image_path' => $db_path
                     ]);
                     $uploaded++;
+                } else {
+                    $upload_errors[] = "File $key: move_uploaded_file failed for $file_name. Check folder permissions.";
                 }
             }
             finfo_close($finfo);
+            
+            // Log errors if any occurred
+            if (!empty($upload_errors)) {
+                error_log("Image upload errors: " . implode("; ", $upload_errors));
+            }
         }
 
         $success_message = $edit_mode ? "Listing updated successfully!" : "Listing created successfully!";
@@ -852,9 +960,13 @@ if (isset($_POST['create_listing'])) {
                     <div id="existing-images" style="margin-top: 20px;">
                         <h4 style="margin-bottom: 15px; color: #666;">Current Images:</h4>
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 15px;">
-                            <?php foreach ($listing_images as $image): ?>
+                            <?php foreach ($listing_images as $image): 
+                                // Fix image path - remove ../ if present and ensure it points to uploads
+                                $img_path = $image['image_path'] ?? '';
+                                $img_path = str_replace('../uploads/', 'uploads/', $img_path);
+                            ?>
                             <div class="preview-item">
-                                <img src="<?php echo htmlspecialchars($image['image_path'] ?? ''); ?>" alt="Listing image">
+                                <img src="<?php echo htmlspecialchars($img_path); ?>" alt="Listing image">
                                 <button type="button" class="remove-photo" onclick="removeExistingImage(<?php echo (int)$image['image_id']; ?>, this)">×</button>
                             </div>
                             <?php endforeach; ?>

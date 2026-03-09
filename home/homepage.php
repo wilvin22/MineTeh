@@ -4,11 +4,48 @@ session_start();
 // Set timezone to match your local timezone
 date_default_timezone_set('Asia/Manila'); // Change this to your timezone
 
+include '../config.php';
 include '../database/supabase.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
+}
+
+// Check if user is restricted and if restriction has expired
+$user_status = isset($_SESSION['user_status']) ? $_SESSION['user_status'] : 'active';
+$restriction_notice = null;
+$restriction_error = isset($_GET['error']) && $_GET['error'] === 'restricted';
+
+// Always fetch fresh user status from database to catch admin changes
+$user = $supabase->select('accounts', '*', ['account_id' => $_SESSION['user_id']], true);
+
+if ($user && is_array($user)) {
+    $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
+    $_SESSION['user_status'] = $user_status; // Update session with fresh status
+    
+    if ($user_status === 'restricted' || $restriction_error) {
+        $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+        
+        if ($restriction_until && strtotime($restriction_until) <= time()) {
+            // Restriction expired, reactivate user
+            $supabase->update('accounts', [
+                'user_status' => 'active',
+                'restriction_until' => null,
+                'status_reason' => null
+            ], ['account_id' => $_SESSION['user_id']]);
+            $_SESSION['user_status'] = 'active';
+            $user_status = 'active';
+        } else {
+            $reason = isset($user['status_reason']) ? $user['status_reason'] : 'No reason provided';
+            $until_text = $restriction_until ? ' until ' . date('F j, Y g:i A', strtotime($restriction_until)) : ' permanently';
+            $restriction_notice = [
+                'reason' => $reason,
+                'until' => $until_text,
+                'from_action' => $restriction_error // Flag to show it came from a blocked action
+            ];
+        }
+    }
 }
 
 ?>
@@ -310,6 +347,144 @@ body {
     content: '🤍';
 }
 
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    #main-content {
+        padding: 15px;
+    }
+
+    .filter-section {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+
+    .filter-tabs {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .filter-tab {
+        padding: 10px 16px;
+        font-size: 14px;
+        flex: 1;
+        min-width: 100px;
+        justify-content: center;
+    }
+
+    .category-filter {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .category-filter label {
+        justify-content: center;
+    }
+
+    .category-dropdown {
+        width: 100%;
+        min-width: auto;
+    }
+
+    #listings-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .listing-card {
+        border-radius: 8px;
+    }
+
+    .listing-image img {
+        height: 140px;
+    }
+
+    .listing-content {
+        padding: 10px;
+    }
+
+    .listing-price {
+        font-size: 16px;
+    }
+
+    .listing-title {
+        font-size: 13px;
+    }
+
+    .listing-meta {
+        font-size: 11px;
+    }
+
+    .listing-owner-badge,
+    .edit-listing-btn {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+
+    .favorite-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+
+    .auction-timer {
+        font-size: 10px;
+        padding: 4px 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    #main-content {
+        padding: 10px;
+    }
+
+    .filter-tab {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .filter-tab .tab-icon {
+        font-size: 16px;
+    }
+
+    #listings-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .listing-image img {
+        height: 120px;
+    }
+
+    .listing-content {
+        padding: 8px;
+    }
+
+    .listing-price {
+        font-size: 14px;
+    }
+
+    .listing-title {
+        font-size: 12px;
+    }
+
+    .listing-meta {
+        font-size: 10px;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .listing-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+}
+
 </style>
 
 </head>
@@ -318,6 +493,29 @@ body {
     <?php include '../sidebar/sidebar.php'; ?>
     
     <div id="main-content" class="main-wrapper">
+        <?php if ($restriction_notice): ?>
+        <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a6f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="font-size: 40px;">⚠️</div>
+                <div style="flex: 1;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 20px;">
+                        <?php echo $restriction_notice['from_action'] ? 'Action Blocked - Account Restricted' : 'Your Account is Restricted'; ?>
+                    </h3>
+                    <p style="margin: 0 0 8px 0; opacity: 0.95;">
+                        <?php if ($restriction_notice['from_action']): ?>
+                            You cannot place bids or create listings<?php echo $restriction_notice['until']; ?>.
+                        <?php else: ?>
+                            You cannot create listings or place bids<?php echo $restriction_notice['until']; ?>.
+                        <?php endif; ?>
+                    </p>
+                    <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 6px; font-size: 14px;">
+                        <strong>Reason:</strong> <?php echo htmlspecialchars($restriction_notice['reason']); ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
         <!-- Filter Section -->
         <div class="filter-section">
             <!-- Listing Type Tabs -->
@@ -408,7 +606,7 @@ body {
                         $is_own_listing = isset($_SESSION['user_id']) && $_SESSION['user_id'] == $seller_id;
 
                         // Get image from batch results
-                        $listing_image = isset($allImages[$listing_id]) ? $allImages[$listing_id] : "../assets/no-image.png";
+                        $listing_image = isset($allImages[$listing_id]) ? getImageUrl($allImages[$listing_id]) : getImageUrl('');
 
                         // Check if user has favorited this listing from batch results
                         $is_favorited = in_array($listing_id, $userFavorites);
