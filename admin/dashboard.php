@@ -11,72 +11,39 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || $_SESSION['
 // Get statistics
 try {
     // Total users
-    $users_result = supabase_query('users', 'select=count');
-    $total_users = 0;
-    if ($users_result) {
-        $users_data = json_decode($users_result, true);
-        $total_users = $users_data[0]['count'] ?? 0;
-    }
+    $total_users = $supabase->count('users');
     
     // Total listings
-    $listings_result = supabase_query('listings', 'select=count');
-    $total_listings = 0;
-    if ($listings_result) {
-        $listings_data = json_decode($listings_result, true);
-        $total_listings = $listings_data[0]['count'] ?? 0;
-    }
+    $total_listings = $supabase->count('listings');
     
     // Active listings
-    $active_listings_result = supabase_query('listings', 'select=count&status=eq.OPEN');
-    $active_listings = 0;
-    if ($active_listings_result) {
-        $active_data = json_decode($active_listings_result, true);
-        $active_listings = $active_data[0]['count'] ?? 0;
-    }
+    $active_listings = $supabase->count('listings', ['status' => 'OPEN']);
     
     // Total orders
-    $orders_result = supabase_query('orders', 'select=count');
-    $total_orders = 0;
-    if ($orders_result) {
-        $orders_data = json_decode($orders_result, true);
-        $total_orders = $orders_data[0]['count'] ?? 0;
-    }
+    $total_orders = $supabase->count('orders');
     
     // Pending orders
-    $pending_orders_result = supabase_query('orders', 'select=count&status=eq.pending');
-    $pending_orders = 0;
-    if ($pending_orders_result) {
-        $pending_data = json_decode($pending_orders_result, true);
-        $pending_orders = $pending_data[0]['count'] ?? 0;
-    }
+    $pending_orders = $supabase->count('orders', ['status' => 'pending']);
     
     // Total bids
-    $bids_result = supabase_query('bids', 'select=count');
-    $total_bids = 0;
-    if ($bids_result) {
-        $bids_data = json_decode($bids_result, true);
-        $total_bids = $bids_data[0]['count'] ?? 0;
-    }
+    $total_bids = $supabase->count('bids');
     
     // Recent users (last 5)
-    $recent_users_result = supabase_query('users', 'select=*&order=created_at.desc&limit=5');
-    $recent_users = [];
-    if ($recent_users_result) {
-        $recent_users = json_decode($recent_users_result, true);
+    $recent_users = $supabase->customQuery('users', '*', 'order=created_at.desc&limit=5');
+    if ($recent_users === false) {
+        $recent_users = [];
     }
     
     // Recent listings (last 5)
-    $recent_listings_result = supabase_query('listings', 'select=*&order=created_at.desc&limit=5');
-    $recent_listings = [];
-    if ($recent_listings_result) {
-        $recent_listings = json_decode($recent_listings_result, true);
+    $recent_listings = $supabase->customQuery('listings', '*', 'order=created_at.desc&limit=5');
+    if ($recent_listings === false) {
+        $recent_listings = [];
     }
     
     // Recent orders (last 5)
-    $recent_orders_result = supabase_query('orders', 'select=*&order=created_at.desc&limit=5');
-    $recent_orders = [];
-    if ($recent_orders_result) {
-        $recent_orders = json_decode($recent_orders_result, true);
+    $recent_orders = $supabase->customQuery('orders', '*', 'order=created_at.desc&limit=5');
+    if ($recent_orders === false) {
+        $recent_orders = [];
     }
     
 } catch (Exception $e) {
@@ -299,6 +266,8 @@ try {
             <h1>📊 Admin Dashboard</h1>
             <div class="header-actions">
                 <a href="users.php">👥 Users</a>
+                <a href="riders.php">🏍️ Riders</a>
+                <a href="delivery-monitor.php">📊 Delivery Monitor</a>
                 <a href="listings.php">📦 Listings</a>
                 <a href="orders.php">🛒 Orders</a>
                 <a href="categories.php">🏷️ Categories</a>

@@ -222,7 +222,7 @@ $favorites = $supabase->select('favorites', '*', ['user_id' => $user_id]);
         function removeFavorite(listingId) {
             if (!confirm('Remove this item from your saved items?')) return;
 
-            fetch('../api/favorite-action.php', {
+            fetch('../actions/favorite-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

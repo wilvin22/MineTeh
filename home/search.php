@@ -14,8 +14,10 @@ $category = isset($_GET['category']) ? trim($_GET['category']) : '';
 $listing_type = isset($_GET['type']) ? trim($_GET['type']) : '';
 
 // Get categories for filter
-$categories_result = supabase_query('categories', 'select=*&order=name.asc');
-$categories = $categories_result ? json_decode($categories_result, true) : [];
+$categories = $supabase->customQuery('categories', '*', 'order=name.asc');
+if (!$categories) {
+    $categories = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

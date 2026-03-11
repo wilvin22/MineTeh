@@ -215,6 +215,8 @@ if (!empty($orders)) {
             <div class="logo">🛡️ Admin Panel</div>
             <a href="index.php" class="nav-item">📊 Dashboard</a>
             <a href="users.php" class="nav-item">👥 Users</a>
+            <a href="riders.php" class="nav-item">🏍️ Riders</a>
+            <a href="delivery-monitor.php" class="nav-item">📊 Delivery Monitor</a>
             <a href="listings.php" class="nav-item">📦 Listings</a>
             <a href="orders.php" class="nav-item active">🛒 Orders</a>
             <a href="categories.php" class="nav-item">🏷️ Categories</a>

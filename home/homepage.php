@@ -70,6 +70,83 @@ body {
     padding: 30px;
 }
 
+/* Search Section Styles */
+.search-section {
+    margin-bottom: 25px;
+}
+
+.search-container {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.search-icon {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: #999;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.search-input {
+    width: 100%;
+    padding: 18px 60px 18px 55px;
+    border: 2px solid #e9ecef;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #333;
+    background: white;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #945a9b;
+    box-shadow: 0 4px 16px rgba(148, 90, 155, 0.15);
+}
+
+.search-input::placeholder {
+    color: #999;
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #e9ecef;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    transition: all 0.2s ease;
+    z-index: 2;
+}
+
+.clear-search-btn:hover {
+    background: #945a9b;
+    color: white;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.search-highlight {
+    background: linear-gradient(135deg, #fff3cd, #ffe69c);
+    border: 2px solid #945a9b !important;
+    box-shadow: 0 6px 20px rgba(148, 90, 155, 0.25) !important;
+}
+
 .filter-section {
     display: flex;
     justify-content: space-between;
@@ -357,6 +434,27 @@ body {
         padding: 15px;
     }
 
+    .search-section {
+        margin-bottom: 20px;
+    }
+
+    .search-input {
+        padding: 15px 50px 15px 45px;
+        font-size: 15px;
+    }
+
+    .search-icon {
+        left: 15px;
+        font-size: 18px;
+    }
+
+    .clear-search-btn {
+        right: 15px;
+        width: 26px;
+        height: 26px;
+        font-size: 13px;
+    }
+
     .filter-section {
         flex-direction: column;
         align-items: stretch;
@@ -516,6 +614,15 @@ body {
         </div>
         <?php endif; ?>
         
+        <!-- Search Bar -->
+        <div class="search-section">
+            <div class="search-container">
+                <div class="search-icon">🔍</div>
+                <input type="text" id="search-input" class="search-input" placeholder="Search for items, categories, or locations...">
+                <button id="clear-search" class="clear-search-btn" style="display: none;">✕</button>
+            </div>
+        </div>
+
         <!-- Filter Section -->
         <div class="filter-section">
             <!-- Listing Type Tabs -->
@@ -649,29 +756,53 @@ body {
         const filterTabs = document.querySelectorAll('.filter-tab');
         const categorySelect = document.getElementById('category-select');
         const listingCards = document.querySelectorAll('.listing-card');
+        const searchInput = document.getElementById('search-input');
+        const clearSearchBtn = document.getElementById('clear-search');
 
         let currentTypeFilter = 'all';
         let currentCategoryFilter = 'all';
+        let currentSearchQuery = '';
 
         function applyFilters() {
             let visibleCount = 0;
+            const searchLower = currentSearchQuery.toLowerCase().trim();
 
             listingCards.forEach(card => {
                 const cardType = card.dataset.type;
                 const cardCategory = card.dataset.category;
+                
+                // Get card text content for search
+                const title = card.querySelector('.listing-title')?.textContent.toLowerCase() || '';
+                const location = card.querySelector('.listing-meta span:first-child')?.textContent.toLowerCase() || '';
+                const price = card.querySelector('.listing-price')?.textContent.toLowerCase() || '';
 
                 // Check type filter
                 const typeMatch = currentTypeFilter === 'all' || cardType === currentTypeFilter;
                 
                 // Check category filter
                 const categoryMatch = currentCategoryFilter === 'all' || cardCategory === currentCategoryFilter;
+                
+                // Check search query
+                const searchMatch = searchLower === '' || 
+                                  title.includes(searchLower) || 
+                                  location.includes(searchLower) ||
+                                  price.includes(searchLower);
 
-                // Show card only if both filters match
-                if (typeMatch && categoryMatch) {
+                // Show card only if all filters match
+                if (typeMatch && categoryMatch && searchMatch) {
                     card.style.display = 'block';
+                    
+                    // Highlight matching cards when searching
+                    if (searchLower !== '') {
+                        card.classList.add('search-highlight');
+                    } else {
+                        card.classList.remove('search-highlight');
+                    }
+                    
                     visibleCount++;
                 } else {
                     card.style.display = 'none';
+                    card.classList.remove('search-highlight');
                 }
             });
 
@@ -686,10 +817,49 @@ body {
                 const emptyState = document.createElement('div');
                 emptyState.className = 'empty-state';
                 emptyState.style.cssText = 'grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #999;';
-                emptyState.innerHTML = '<div style="font-size: 48px; margin-bottom: 16px;">📦</div><h2>No listings found</h2><p>Try selecting different filters</p>';
+                
+                let emptyMessage = '<div style="font-size: 48px; margin-bottom: 16px;">🔍</div>';
+                if (searchLower !== '') {
+                    emptyMessage += `<h2>No results found for "${currentSearchQuery}"</h2><p>Try different keywords or clear your search</p>`;
+                } else {
+                    emptyMessage += '<h2>No listings found</h2><p>Try selecting different filters</p>';
+                }
+                
+                emptyState.innerHTML = emptyMessage;
                 grid.appendChild(emptyState);
             }
         }
+
+        // Search functionality
+        searchInput.addEventListener('input', (e) => {
+            currentSearchQuery = e.target.value;
+            
+            // Show/hide clear button
+            if (currentSearchQuery.trim() !== '') {
+                clearSearchBtn.style.display = 'flex';
+            } else {
+                clearSearchBtn.style.display = 'none';
+            }
+            
+            applyFilters();
+        });
+
+        // Clear search button
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            currentSearchQuery = '';
+            clearSearchBtn.style.display = 'none';
+            searchInput.focus();
+            applyFilters();
+        });
+
+        // Allow Enter key to trigger search
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyFilters();
+            }
+        });
 
         // Type filter tabs
         filterTabs.forEach(tab => {
@@ -744,7 +914,7 @@ body {
             const btn = event.currentTarget;
             const isFavorited = btn.classList.contains('favorited');
             
-            fetch('../api/favorite-action.php', {
+            fetch('../actions/favorite-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

@@ -6,7 +6,11 @@
  * to automatically close expired auctions and notify winners.
  * 
  * Cron job example (run every 5 minutes):
- * */5 * * * * php /path/to/MineTeh/cron/close-expired-auctions.php
+ * Add this line to your crontab:
+ * 
+ *   asterisk/5 * * * * php /path/to/MineTeh/cron/close-expired-auctions.php
+ * 
+ * (Replace 'asterisk' with the * symbol)
  */
 
 require_once __DIR__ . '/../database/supabase.php';
@@ -25,18 +29,16 @@ function log_message($message) {
 log_message("=== Starting Auction Closing Script ===");
 
 try {
+    global $supabase;
+    
     // Get all open auctions that have expired
     $now = date('Y-m-d H:i:s');
-    $query = "select=*&listing_type=eq.BID&status=eq.OPEN&bid_end_time=lt.$now";
+    $expired_auctions = $supabase->customQuery('listings', '*', "listing_type=eq.BID&status=eq.OPEN&bid_end_time=lt.$now");
     
-    $result = supabase_query('listings', $query);
-    
-    if ($result === false) {
+    if ($expired_auctions === false) {
         log_message("ERROR: Failed to query expired auctions");
         exit(1);
     }
-    
-    $expired_auctions = json_decode($result, true);
     
     if (empty($expired_auctions)) {
         log_message("No expired auctions found");
@@ -53,23 +55,20 @@ try {
         log_message("Processing auction #$listing_id: $title");
         
         // Get highest bid
-        $bids_query = "select=*&listing_id=eq.$listing_id&order=bid_amount.desc&limit=1";
-        $bids_result = supabase_query('bids', $bids_query);
+        $bids = $supabase->customQuery('bids', '*', "listing_id=eq.$listing_id&order=bid_amount.desc&limit=1");
         
-        if ($bids_result === false) {
+        if ($bids === false) {
             log_message("ERROR: Failed to get bids for auction #$listing_id");
             continue;
         }
-        
-        $bids = json_decode($bids_result, true);
         
         if (empty($bids)) {
             // No bids - close auction without winner
             log_message("Auction #$listing_id has no bids - closing without winner");
             
-            $update_result = supabase_update('listings', [
+            $update_result = $supabase->update('listings', [
                 'status' => 'CLOSED'
-            ], "listing_id=eq.$listing_id");
+            ], ['listing_id' => $listing_id]);
             
             if ($update_result !== false) {
                 // Notify seller that auction ended with no bids
@@ -96,11 +95,11 @@ try {
         log_message("Winner: User #$winner_id with bid of ₱$winning_amount");
         
         // Update listing status and set winner
-        $update_result = supabase_update('listings', [
+        $update_result = $supabase->update('listings', [
             'status' => 'CLOSED',
             'winner_id' => $winner_id,
             'final_price' => $winning_amount
-        ], "listing_id=eq.$listing_id");
+        ], ['listing_id' => $listing_id]);
         
         if ($update_result === false) {
             log_message("ERROR: Failed to update auction #$listing_id");
@@ -124,11 +123,9 @@ try {
         );
         
         // Notify all other bidders that they lost
-        $all_bids_query = "select=user_id&listing_id=eq.$listing_id&user_id=neq.$winner_id";
-        $all_bids_result = supabase_query('bids', $all_bids_query);
+        $all_bids = $supabase->customQuery('bids', 'user_id', "listing_id=eq.$listing_id&user_id=neq.$winner_id");
         
-        if ($all_bids_result !== false) {
-            $all_bids = json_decode($all_bids_result, true);
+        if ($all_bids !== false) {
             $notified_users = [];
             
             foreach ($all_bids as $bid) {

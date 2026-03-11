@@ -83,6 +83,20 @@ if (isset($_POST['place_order'])) {
         // Update listing status to sold
         $supabase->update('listings', ['status' => 'sold'], ['id' => $listing_id]);
         
+        // Auto-assign delivery if needed
+        if ($delivery_method !== 'pickup') {
+            require_once '../services/AutoDeliveryAssignment.php';
+            $deliveryService = new AutoDeliveryAssignment($supabase);
+            $assignment_result = $deliveryService->assignDeliveryForOrder($order_id);
+            
+            // Log assignment result
+            if ($assignment_result['success']) {
+                error_log("Auto-delivery assigned for order $order_id: " . $assignment_result['message']);
+            } else {
+                error_log("Auto-delivery assignment failed for order $order_id: " . $assignment_result['message']);
+            }
+        }
+        
         // Create notification helper
         $notificationHelper = new NotificationsHelper();
         

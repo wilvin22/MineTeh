@@ -151,40 +151,37 @@ function security_check_user_status() {
     }
     
     require_once __DIR__ . '/../database/supabase.php';
+    global $supabase;
     
     $user_id = $_SESSION['user_id'];
-    $user_query = "select=status,restriction_until&user_id=eq.$user_id";
-    $user_result = supabase_query('users', $user_query);
+    $users = $supabase->customQuery('users', 'status,restriction_until', "user_id=eq.$user_id");
     
-    if ($user_result) {
-        $users = json_decode($user_result, true);
-        if (!empty($users)) {
-            $user = $users[0];
+    if ($users && !empty($users)) {
+        $user = $users[0];
+        
+        // Check if banned
+        if ($user['status'] === 'banned') {
+            session_destroy();
+            header('Location: ../login.php?error=banned');
+            exit;
+        }
+        
+        // Check if restricted
+        if ($user['status'] === 'restricted') {
+            $restriction_until = $user['restriction_until'] ?? null;
             
-            // Check if banned
-            if ($user['status'] === 'banned') {
-                session_destroy();
-                header('Location: ../login.php?error=banned');
-                exit;
-            }
-            
-            // Check if restricted
-            if ($user['status'] === 'restricted') {
-                $restriction_until = $user['restriction_until'] ?? null;
-                
-                // Check if restriction has expired
-                if ($restriction_until && strtotime($restriction_until) < time()) {
-                    // Lift restriction
-                    supabase_update('users', ['status' => 'active', 'restriction_until' => null], "user_id=eq.$user_id");
-                } else {
-                    // Still restricted
-                    $_SESSION['is_restricted'] = true;
-                    $_SESSION['restriction_until'] = $restriction_until;
-                }
+            // Check if restriction has expired
+            if ($restriction_until && strtotime($restriction_until) < time()) {
+                // Lift restriction
+                $supabase->update('users', ['status' => 'active', 'restriction_until' => null], ['user_id' => $user_id]);
             } else {
-                unset($_SESSION['is_restricted']);
-                unset($_SESSION['restriction_until']);
+                // Still restricted
+                $_SESSION['is_restricted'] = true;
+                $_SESSION['restriction_until'] = $restriction_until;
             }
+        } else {
+            unset($_SESSION['is_restricted']);
+            unset($_SESSION['restriction_until']);
         }
     }
 }

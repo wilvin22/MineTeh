@@ -117,7 +117,7 @@ if ($listing['listing_type'] === 'BID') {
 $is_favorited = false;
 if (isset($_SESSION['user_id'])) {
     $favorite_check = $supabase->select('favorites', '*', [
-        'user_id' => $_SESSION['user_id'],
+        'user_id' => $_SESSION['user_id'],  // Correct column name from favorites table
         'listing_id' => $listing_id
     ]);
     $is_favorited = !empty($favorite_check);
@@ -129,8 +129,11 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($listing['title']); ?> - MineTeh</title>
-    <!-- Version: 2024-03-07-v2 - Restriction Check Active -->
-    <link rel="stylesheet" href="../sidebar/sidebar.css">
+    <!-- Version: 2024-03-07-v4 - FORCE REFRESH - <?php echo time() . '-' . rand(1000, 9999); ?> -->
+    <link rel="stylesheet" href="../sidebar/sidebar.css?v=<?php echo time(); ?>">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
         body {
             background: #f5f5f5;
@@ -621,7 +624,7 @@ if (isset($_SESSION['user_id'])) {
                                         <a href="homepage.php" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;">View Details</a>
                                     </div>
                                 <?php else: ?>
-                                    <form method="POST" action="../api/place-bid.php" class="bid-form">
+                                    <form method="POST" action="../actions/place-bid.php" class="bid-form">
                                         <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
                                         <input type="number" 
                                                name="bid_amount" 
@@ -725,7 +728,7 @@ if (isset($_SESSION['user_id'])) {
             const icon = document.getElementById('favorite-icon');
             const isFavorited = icon.textContent === '❤️';
             
-            fetch('../api/favorite-action.php', {
+            fetch('../actions/favorite-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -764,7 +767,7 @@ if (isset($_SESSION['user_id'])) {
             
             if (!confirm(message)) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -792,7 +795,7 @@ if (isset($_SESSION['user_id'])) {
         function disableListing(listingId) {
             if (!confirm('Disable this listing? It will be hidden from buyers.')) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -820,7 +823,7 @@ if (isset($_SESSION['user_id'])) {
         function enableListing(listingId) {
             if (!confirm('Enable this listing? It will be visible to buyers again.')) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -846,7 +849,7 @@ if (isset($_SESSION['user_id'])) {
         }
 
         function addToCart(listingId) {
-            fetch('../api/cart-action.php', {
+            fetch('../actions/cart-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -915,18 +918,11 @@ if (isset($_SESSION['user_id'])) {
         // Update countdown immediately and then every second
         updateCountdown();
         setInterval(updateCountdown, 1000);
-    </script>
-</body>
-</html>
-                alert('Error enabling listing');
-                console.error(error);
-            });
-        }
 
         // Bid history functionality
-        <?php if ($listing['listing_type'] == 'BID'): ?>
+        <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID'): ?>
         function loadBidHistory() {
-            fetch('../api/get-bid-history.php?listing_id=<?php echo $listing_id; ?>')
+            fetch('../actions/get-bid-history.php?listing_id=<?php echo $listing_id; ?>')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success && data.bids) {
@@ -984,48 +980,34 @@ if (isset($_SESSION['user_id'])) {
 
         // Refresh bid history every 30 seconds
         setInterval(loadBidHistory, 30000);
-
-        // Auction countdown timer
-        function updateCountdown() {
-            const endTime = new Date('<?php echo $listing['bid_end_time']; ?>').getTime();
-            const now = new Date().getTime();
-            const distance = endTime - now;
-
-            if (distance < 0) {
-                document.getElementById('countdown-timer').innerHTML = '<span style="color: #e74c3c;">Auction Ended</span>';
-                clearInterval(countdownInterval);
-                return;
-            }
-
-            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            let timeString = '';
-            if (days > 0) timeString += `${days}d `;
-            timeString += `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-            document.getElementById('countdown-timer').textContent = timeString;
-        }
-
-        // Update countdown every second
-        const countdownInterval = setInterval(updateCountdown, 1000);
-        updateCountdown(); // Initial call
         <?php endif; ?>
 
         // Image gallery functionality
         let currentImageIndex = 0;
-        const images = <?php echo json_encode(array_map(function($img) {
-            return str_replace('../', '', $img['image_path']);
-        }, $listing_images)); ?>;
+        const images = <?php 
+            // Ensure $images is an array and has image_path key
+            $imageArray = [];
+            if (is_array($images) && !empty($images)) {
+                foreach ($images as $img) {
+                    if (isset($img['image_path'])) {
+                        $imageArray[] = str_replace('../', '', $img['image_path']);
+                    }
+                }
+            }
+            echo json_encode($imageArray);
+        ?>;
 
         function changeImage(direction) {
+            if (images.length === 0) return;
+            
             currentImageIndex += direction;
             if (currentImageIndex < 0) currentImageIndex = images.length - 1;
             if (currentImageIndex >= images.length) currentImageIndex = 0;
             
-            document.getElementById('main-image').src = images[currentImageIndex];
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.src = images[currentImageIndex];
+            }
             
             // Update thumbnail selection
             document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
@@ -1034,8 +1016,13 @@ if (isset($_SESSION['user_id'])) {
         }
 
         function selectImage(index) {
+            if (images.length === 0 || index < 0 || index >= images.length) return;
+            
             currentImageIndex = index;
-            document.getElementById('main-image').src = images[index];
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.src = images[index];
+            }
             
             document.querySelectorAll('.thumbnail').forEach((thumb, idx) => {
                 thumb.classList.toggle('active', idx === index);
@@ -1049,13 +1036,13 @@ if (isset($_SESSION['user_id'])) {
         });
 
         // Bid form validation
-        <?php if ($listing['listing_type'] == 'BID' && $listing['status'] == 'OPEN'): ?>
+        <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID' && isset($listing['status']) && $listing['status'] == 'OPEN'): ?>
         const bidForm = document.getElementById('bid-form');
         if (bidForm) {
             bidForm.addEventListener('submit', function(e) {
                 const bidAmount = parseFloat(document.getElementById('bid-amount').value);
-                const currentBid = <?php echo $listing['current_bid'] ?? $listing['starting_price']; ?>;
-                const minIncrement = <?php echo $listing['min_bid_increment'] ?? 10; ?>;
+                const currentBid = <?php echo isset($listing['current_bid']) ? $listing['current_bid'] : (isset($listing['starting_price']) ? $listing['starting_price'] : 0); ?>;
+                const minIncrement = <?php echo isset($listing['min_bid_increment']) ? $listing['min_bid_increment'] : 10; ?>;
                 const minBid = currentBid + minIncrement;
 
                 if (bidAmount < minBid) {
@@ -1068,37 +1055,6 @@ if (isset($_SESSION['user_id'])) {
                 const submitBtn = this.querySelector('button[type="submit"]');
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Placing Bid...';
-            });
-        }
-        <?php endif; ?>
-
-        // Add to cart functionality
-        <?php if ($listing['listing_type'] == 'FIXED'): ?>
-        function addToCart() {
-            const formData = new FormData();
-            formData.append('listing_id', <?php echo $listing_id; ?>);
-            formData.append('action', 'add');
-
-            fetch('../api/cart-action.php', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Added to cart successfully!');
-                    // Update cart count if you have one
-                    const cartCount = document.querySelector('.cart-count');
-                    if (cartCount) {
-                        cartCount.textContent = parseInt(cartCount.textContent || 0) + 1;
-                    }
-                } else {
-                    alert('Error: ' + (data.message || 'Failed to add to cart'));
-                }
-            })
-            .catch(error => {
-                alert('Error adding to cart');
-                console.error(error);
             });
         }
         <?php endif; ?>

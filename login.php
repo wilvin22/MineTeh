@@ -137,11 +137,14 @@ if (isset($_POST['log-in'])) {
                         $_SESSION['user_id'] = $user['account_id'];
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? false;
+                        $_SESSION['is_rider'] = $user['is_rider'] ?? false;
                         $_SESSION['user_status'] = $user_status;
                         
                         // redirect based on role
                         if ($user['is_admin']) {
                             header("Location: admin-dashboard.php");
+                        } elseif ($user['is_rider']) {
+                            header("Location: rider/dashboard.php");
                         } else {
                             header("Location: home/homepage.php");
                         }
@@ -151,11 +154,14 @@ if (isset($_POST['log-in'])) {
                         $_SESSION['user_id'] = $user['account_id'];
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? false;
+                        $_SESSION['is_rider'] = $user['is_rider'] ?? false;
                         $_SESSION['user_status'] = $user_status;
                         
                         // redirect based on role
                         if ($user['is_admin']) {
                             header("Location: admin-dashboard.php");
+                        } elseif ($user['is_rider']) {
+                            header("Location: rider/dashboard.php");
                         } else {
                             header("Location: home/homepage.php");
                         }
