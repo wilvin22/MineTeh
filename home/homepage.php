@@ -585,6 +585,9 @@ body {
 
 </style>
 
+<!-- Responsive CSS -->
+<link rel="stylesheet" href="../css/responsive.css">
+
 </head>
 
 <body>
@@ -983,6 +986,9 @@ body {
         updateCountdownTimers();
         setInterval(updateCountdownTimers, 1000);
     </script>
+    
+    <!-- Responsive JavaScript -->
+    <script src="../js/responsive.js"></script>
 </body>
 
 </html>

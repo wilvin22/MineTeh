@@ -1,11 +1,18 @@
 <?php
 // API Configuration and Helper Functions
 
+// Prevent any output before JSON response
+ob_start();
+
+// Disable error display (errors should be logged, not displayed)
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 // CORS headers for mobile app access
-header('Access-Control-Allow-Origin: https://192.168.18.4.com');
+header('Access-Control-Allow-Origin: *'); // Allow all origins for testing, restrict in production
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 // Handle preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -66,7 +73,14 @@ function validateToken($token) {
  * Send JSON response
  */
 function sendResponse($success, $data = null, $message = null, $statusCode = 200) {
+    // Clear any output buffers to ensure clean JSON
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    
+    // Set headers
     http_response_code($statusCode);
+    header('Content-Type: application/json; charset=utf-8');
     
     $response = ['success' => $success];
     
@@ -78,7 +92,7 @@ function sendResponse($success, $data = null, $message = null, $statusCode = 200
         $response['data'] = $data;
     }
     
-    echo json_encode($response);
+    echo json_encode($response, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
