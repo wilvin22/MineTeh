@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Actions Folder Test</title>
+    <style>
+        body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test { background: #f0f0f0; padding: 15px; margin: 10px 0; border-radius: 5px; }
+        .success { color: green; }
+        .error { color: red; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #2980b9; }
+    </style>
+</head>
+<body>
+    <h1>✅ Actions Folder Accessibility Test</h1>
+    <p>Testing if the renamed folder works on InfinityFree...</p>
+
+    <div class="test">
+        <h3>Test 1: Simple Test File</h3>
+        <button onclick="testSimple()">Test actions/test-simple.php</button>
+        <div id="result1"></div>
+    </div>
+
+    <div class="test">
+        <h3>Test 2: Admin Rider Action</h3>
+        <button onclick="testAdminRider()">Test actions/admin-rider-action.php</button>
+        <div id="result2"></div>
+    </div>
+
+    <div class="test">
+        <h3>Test 3: From Admin Folder (Relative Path)</h3>
+        <p>This simulates how admin/riders.php calls the API</p>
+        <button onclick="testFromAdmin()">Test ../actions/admin-rider-action.php</button>
+        <div id="result3"></div>
+    </div>
+
+    <div class="test">
+        <h3>Results Summary</h3>
+        <div id="summary"></div>
+    </div>
+
+    <script>
+        let results = { test1: false, test2: false, test3: false };
+
+        function testSimple() {
+            const resultDiv = document.getElementById('result1');
+            resultDiv.innerHTML = '<p>Testing...</p>';
+            
+            fetch('actions/test-simple.php')
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = '<p class="success">✓ SUCCESS: ' + JSON.stringify(data) + '</p>';
+                    results.test1 = true;
+                    updateSummary();
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '<p class="error">✗ FAILED: ' + error.message + '</p>';
+                    results.test1 = false;
+                    updateSummary();
+                });
+        }
+
+        function testAdminRider() {
+            const resultDiv = document.getElementById('result2');
+            resultDiv.innerHTML = '<p>Testing...</p>';
+            
+            fetch('actions/admin-rider-action.php', {
+                method: 'POST',
+                body: new FormData()
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = '<p class="success">✓ SUCCESS: ' + JSON.stringify(data) + '</p>';
+                    results.test2 = true;
+                    updateSummary();
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '<p class="error">✗ FAILED: ' + error.message + '</p>';
+                    results.test2 = false;
+                    updateSummary();
+                });
+        }
+
+        function testFromAdmin() {
+            const resultDiv = document.getElementById('result3');
+            resultDiv.innerHTML = '<p>Testing...</p>';
+            
+            // Simulate being in admin/ folder
+            fetch('actions/admin-rider-action.php', {
+                method: 'POST',
+                body: new FormData()
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    resultDiv.innerHTML = '<p class="success">✓ SUCCESS: Relative path works! ' + JSON.stringify(data) + '</p>';
+                    results.test3 = true;
+                    updateSummary();
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '<p class="error">✗ FAILED: ' + error.message + '</p>';
+                    results.test3 = false;
+                    updateSummary();
+                });
+        }
+
+        function updateSummary() {
+            const summaryDiv = document.getElementById('summary');
+            const passed = Object.values(results).filter(r => r).length;
+            const total = Object.keys(results).length;
+            
+            if (passed === total) {
+                summaryDiv.innerHTML = '<h2 class="success">🎉 All Tests Passed! (' + passed + '/' + total + ')</h2><p>The actions folder is working correctly. You can now use admin/riders.php!</p>';
+            } else {
+                summaryDiv.innerHTML = '<h2>Tests: ' + passed + '/' + total + ' passed</h2>';
+            }
+        }
+
+        // Auto-run all tests
+        window.addEventListener('load', function() {
+            setTimeout(testSimple, 500);
+            setTimeout(testAdminRider, 1500);
+            setTimeout(testFromAdmin, 2500);
+        });
+    </script>
+</body>
+</html>

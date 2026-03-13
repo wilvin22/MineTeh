@@ -1,5 +1,6 @@
 <?php
 session_start();
+include '../config.php';
 include '../database/supabase.php';
 include '../database/notifications_helper.php';
 
@@ -66,18 +67,35 @@ if (isset($_POST['place_order'])) {
         'buyer_id' => $user_id,
         'seller_id' => $listing['seller_id'],
         'listing_id' => $listing_id,
-        'total_amount' => $listing['price'],
+        'order_amount' => $listing['price'],
         'payment_method' => $payment_method,
         'payment_status' => 'pending',
         'delivery_address' => $delivery_address,
         'delivery_method' => $delivery_method,
-        'status' => 'pending'
+        'order_status' => 'pending'
     ];
     
     $result = $supabase->insert('orders', $order_data);
     
     if ($result && !empty($result[0])) {
         $order_id = $result[0]['order_id'];
+        
+        // Update listing status to sold
+        $supabase->update('listings', ['status' => 'sold'], ['id' => $listing_id]);
+        
+        // Auto-assign delivery if needed
+        if ($delivery_method !== 'pickup') {
+            require_once '../services/AutoDeliveryAssignment.php';
+            $deliveryService = new AutoDeliveryAssignment($supabase);
+            $assignment_result = $deliveryService->assignDeliveryForOrder($order_id);
+            
+            // Log assignment result
+            if ($assignment_result['success']) {
+                error_log("Auto-delivery assigned for order $order_id: " . $assignment_result['message']);
+            } else {
+                error_log("Auto-delivery assignment failed for order $order_id: " . $assignment_result['message']);
+            }
+        }
         
         // Create notification helper
         $notificationHelper = new NotificationsHelper();
@@ -102,7 +120,10 @@ if (isset($_POST['place_order'])) {
         header("Location: order-confirmation.php?order_id=$order_id");
         exit;
     } else {
-        $error = "Failed to place order. Please try again.";
+        // Log the actual error for debugging
+        error_log("Order creation failed. Result: " . print_r($result, true));
+        error_log("Order data: " . print_r($order_data, true));
+        $error = "Failed to place order. Please try again. If the problem persists, please contact support.";
     }
 }
 ?>
@@ -431,7 +452,7 @@ if (isset($_POST['place_order'])) {
                             <div class="item-preview">
                                 <?php 
                                 $image = $supabase->select('listing_images', 'image_path', ['listing_id' => $listing_id]);
-                                $image_path = !empty($image) ? $image[0]['image_path'] : '../assets/no-image.png';
+                                $image_path = !empty($image) ? getImageUrl($image[0]['image_path']) : BASE_URL . '/assets/no-image.png';
                                 ?>
                                 <img src="<?php echo htmlspecialchars($image_path); ?>" alt="Item" class="item-image">
                                 <div class="item-details">

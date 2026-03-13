@@ -24,7 +24,15 @@ class SupabaseClient {
         $url = $this->supabaseUrl . '/rest/v1/' . $table . '?select=' . $columns;
         
         foreach ($filters as $key => $value) {
-            $url .= '&' . $key . '=eq.' . urlencode($value);
+            if (is_array($value)) {
+                // Handle array values with IN operator - values need to be quoted for strings
+                $quotedValues = array_map(function($v) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }, $value);
+                $url .= '&' . $key . '=in.(' . implode(',', $quotedValues) . ')';
+            } else {
+                $url .= '&' . $key . '=eq.' . urlencode($value);
+            }
         }
         
         if ($single) {
@@ -53,7 +61,15 @@ class SupabaseClient {
         
         $filterParts = [];
         foreach ($filters as $key => $value) {
-            $filterParts[] = $key . '=eq.' . urlencode($value);
+            if (is_array($value)) {
+                // Handle array values with IN operator - values need to be quoted for strings
+                $quotedValues = array_map(function($v) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }, $value);
+                $filterParts[] = $key . '=in.(' . implode(',', $quotedValues) . ')';
+            } else {
+                $filterParts[] = $key . '=eq.' . urlencode($value);
+            }
         }
         $url .= implode('&', $filterParts);
         
@@ -67,7 +83,15 @@ class SupabaseClient {
         
         $filterParts = [];
         foreach ($filters as $key => $value) {
-            $filterParts[] = $key . '=eq.' . urlencode($value);
+            if (is_array($value)) {
+                // Handle array values with IN operator - values need to be quoted for strings
+                $quotedValues = array_map(function($v) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }, $value);
+                $filterParts[] = $key . '=in.(' . implode(',', $quotedValues) . ')';
+            } else {
+                $filterParts[] = $key . '=eq.' . urlencode($value);
+            }
         }
         $url .= implode('&', $filterParts);
         
@@ -80,7 +104,15 @@ class SupabaseClient {
         $url = $this->supabaseUrl . '/rest/v1/' . $table . '?select=' . $columns;
         
         foreach ($queryParams as $key => $value) {
-            $url .= '&' . $key . '=' . urlencode($value);
+            if (is_array($value)) {
+                // Handle array values with IN operator - values need to be quoted for strings
+                $quotedValues = array_map(function($v) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }, $value);
+                $url .= '&' . $key . '=in.(' . implode(',', $quotedValues) . ')';
+            } else {
+                $url .= '&' . $key . '=' . urlencode($value);
+            }
         }
         
         $response = $this->makeRequest('GET', $url);
@@ -150,7 +182,15 @@ class SupabaseClient {
         $url = $this->supabaseUrl . '/rest/v1/' . $table . '?select=count';
         
         foreach ($filters as $key => $value) {
-            $url .= '&' . $key . '=eq.' . urlencode($value);
+            if (is_array($value)) {
+                // Handle array values with IN operator - values need to be quoted for strings
+                $quotedValues = array_map(function($v) {
+                    return '"' . str_replace('"', '""', $v) . '"';
+                }, $value);
+                $url .= '&' . $key . '=in.(' . implode(',', $quotedValues) . ')';
+            } else {
+                $url .= '&' . $key . '=eq.' . urlencode($value);
+            }
         }
         
         $headers = array_merge($this->headers, ['Prefer: count=exact']);

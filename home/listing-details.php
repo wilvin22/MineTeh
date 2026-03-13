@@ -1,7 +1,49 @@
 <?php
 session_start();
 date_default_timezone_set('Asia/Manila');
+
+// Prevent browser caching of this page
+header("Cache-Control: no-cache, no-store, must-revalidate, max-age=0");
+header("Pragma: no-cache");
+header("Expires: 0");
+
+include '../config.php';
 include '../database/supabase.php';
+
+// Check if user is restricted
+$user_is_restricted = false;
+$debug_restriction_info = ""; // For debugging
+if (isset($_SESSION['user_id'])) {
+    $user = $supabase->select('accounts', '*', ['account_id' => $_SESSION['user_id']], true);
+    if ($user && is_array($user)) {
+        $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
+        $debug_restriction_info = "<!-- DEBUG: user_status=" . $user_status . " -->";
+        
+        if ($user_status === 'restricted') {
+            $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+            $debug_restriction_info .= "<!-- DEBUG: restriction_until=" . ($restriction_until ? $restriction_until : 'NULL') . " -->";
+            
+            // Check if restriction expired
+            if ($restriction_until && strtotime($restriction_until) <= time()) {
+                // Expired, reactivate
+                $supabase->update('accounts', [
+                    'user_status' => 'active',
+                    'restriction_until' => null,
+                    'status_reason' => null
+                ], ['account_id' => $_SESSION['user_id']]);
+                $_SESSION['user_status'] = 'active';
+                $debug_restriction_info .= "<!-- DEBUG: Restriction expired, reactivated -->";
+            } else {
+                $user_is_restricted = true;
+                $debug_restriction_info .= "<!-- DEBUG: user_is_restricted=TRUE -->";
+            }
+        }
+    } else {
+        $debug_restriction_info = "<!-- DEBUG: Could not fetch user from database -->";
+    }
+} else {
+    $debug_restriction_info = "<!-- DEBUG: No user logged in -->";
+}
 
 if (!isset($_GET['id'])) {
     header("Location: homepage.php");
@@ -62,6 +104,7 @@ $bids = [];
 $highest_bid = null;
 if ($listing['listing_type'] === 'BID') {
     $bids = $supabase->customQuery('bids', '*', 'listing_id=eq.' . $listing_id . '&order=bid_amount.desc');
+    
     if (!is_array($bids)) {
         $bids = [];
     }
@@ -74,7 +117,7 @@ if ($listing['listing_type'] === 'BID') {
 $is_favorited = false;
 if (isset($_SESSION['user_id'])) {
     $favorite_check = $supabase->select('favorites', '*', [
-        'user_id' => $_SESSION['user_id'],
+        'user_id' => $_SESSION['user_id'],  // Correct column name from favorites table
         'listing_id' => $listing_id
     ]);
     $is_favorited = !empty($favorite_check);
@@ -86,7 +129,11 @@ if (isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($listing['title']); ?> - MineTeh</title>
-    <link rel="stylesheet" href="../sidebar/sidebar.css">
+    <!-- Version: 2024-03-07-v4 - FORCE REFRESH - <?php echo time() . '-' . rand(1000, 9999); ?> -->
+    <link rel="stylesheet" href="../sidebar/sidebar.css?v=<?php echo time(); ?>">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <style>
         body {
             background: #f5f5f5;
@@ -397,7 +444,10 @@ if (isset($_SESSION['user_id'])) {
     </style>
 </head>
 <body>
-    <?php include '../sidebar/sidebar.php'; ?>
+    <?php 
+    echo $debug_restriction_info; // Output debug info in HTML comments
+    include '../sidebar/sidebar.php'; 
+    ?>
     
     <div class="main-wrapper">
         <div class="listing-detail-container">
@@ -411,19 +461,19 @@ if (isset($_SESSION['user_id'])) {
                     <!-- Image Gallery -->
                     <div class="image-gallery">
                         <?php if (!empty($images)): ?>
-                            <img src="<?php echo htmlspecialchars($images[0]['image_path']); ?>" 
+                            <img src="<?php echo htmlspecialchars(getImageUrl($images[0]['image_path'])); ?>" 
                                  alt="<?php echo htmlspecialchars($listing['title']); ?>" 
                                  class="main-image" 
                                  id="mainImage">
                         <?php else: ?>
-                            <img src="../assets/no-image.png" alt="No image" class="main-image" id="mainImage">
+                            <img src="<?php echo getImageUrl(''); ?>" alt="No image" class="main-image" id="mainImage">
                         <?php endif; ?>
                     </div>
 
                     <?php if (count($images) > 1): ?>
                     <div class="image-thumbnails">
                         <?php foreach ($images as $index => $image): ?>
-                            <img src="<?php echo htmlspecialchars($image['image_path']); ?>" 
+                            <img src="<?php echo htmlspecialchars(getImageUrl($image['image_path'])); ?>" 
                                  alt="Thumbnail <?php echo $index + 1; ?>" 
                                  class="thumbnail <?php echo $index === 0 ? 'active' : ''; ?>"
                                  onclick="changeImage(this)">
@@ -550,7 +600,8 @@ if (isset($_SESSION['user_id'])) {
                             <h3>Place Your Bid</h3>
                             <?php 
                             $min_bid_increment = isset($listing['min_bid_increment']) ? floatval($listing['min_bid_increment']) : 1.00;
-                            $min_next_bid = $highest_bid ? $highest_bid['bid_amount'] + $min_bid_increment : $listing['starting_price'];
+                            $starting_price = isset($listing['starting_price']) ? floatval($listing['starting_price']) : floatval($listing['price']);
+                            $min_next_bid = $highest_bid ? floatval($highest_bid['bid_amount']) + $min_bid_increment : $starting_price;
                             
                             // Check if auction has ended
                             $auction_ended = false;
@@ -566,22 +617,30 @@ if (isset($_SESSION['user_id'])) {
                                     <p style="margin: 8px 0 0 0; font-size: 14px;">This auction is no longer accepting bids.</p>
                                 </div>
                             <?php elseif (isset($_SESSION['user_id']) && $_SESSION['user_id'] != $listing['seller_id']): ?>
-                                <form method="POST" action="../api/place-bid.php" class="bid-form">
-                                    <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
-                                    <input type="number" 
-                                           name="bid_amount" 
-                                           placeholder="Enter bid amount" 
-                                           min="<?php echo $min_next_bid; ?>"
-                                           step="<?php echo $min_bid_increment; ?>"
-                                           required>
-                                    <div style="font-size: 12px; color: #666; margin-top: 8px;">
-                                        Minimum bid: ₱<?php echo number_format($min_next_bid, 2); ?>
-                                        (increment: ₱<?php echo number_format($min_bid_increment, 2); ?>)
+                                <?php if ($user_is_restricted): ?>
+                                    <div style="text-align: center; padding: 20px; background: #fff3cd; color: #856404; border-radius: 8px;">
+                                        <strong>⚠️ Account Restricted</strong>
+                                        <p style="margin: 8px 0 0 0; font-size: 14px;">You cannot place bids while your account is restricted.</p>
+                                        <a href="homepage.php" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-size: 14px;">View Details</a>
                                     </div>
-                                    <button type="submit" name="place_bid" class="action-btn btn-primary">
-                                        Place Bid
-                                    </button>
-                                </form>
+                                <?php else: ?>
+                                    <form method="POST" action="../actions/place-bid.php" class="bid-form">
+                                        <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
+                                        <input type="number" 
+                                               name="bid_amount" 
+                                               placeholder="Enter bid amount" 
+                                               min="<?php echo $min_next_bid; ?>"
+                                               step="<?php echo $min_bid_increment; ?>"
+                                               required>
+                                        <div style="font-size: 12px; color: #666; margin-top: 8px;">
+                                            Minimum bid: ₱<?php echo number_format($min_next_bid, 2); ?>
+                                            (increment: ₱<?php echo number_format($min_bid_increment, 2); ?>)
+                                        </div>
+                                        <button type="submit" name="place_bid" class="action-btn btn-primary">
+                                            Place Bid
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
                             <?php elseif (isset($_SESSION['user_id']) && $_SESSION['user_id'] == $listing['seller_id']): ?>
                                 <a href="create-listing.php?edit=<?php echo $listing_id; ?>" 
                                    class="action-btn btn-primary" 
@@ -669,7 +728,7 @@ if (isset($_SESSION['user_id'])) {
             const icon = document.getElementById('favorite-icon');
             const isFavorited = icon.textContent === '❤️';
             
-            fetch('../api/favorite-action.php', {
+            fetch('../actions/favorite-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -708,7 +767,7 @@ if (isset($_SESSION['user_id'])) {
             
             if (!confirm(message)) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -736,7 +795,7 @@ if (isset($_SESSION['user_id'])) {
         function disableListing(listingId) {
             if (!confirm('Disable this listing? It will be hidden from buyers.')) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -764,7 +823,7 @@ if (isset($_SESSION['user_id'])) {
         function enableListing(listingId) {
             if (!confirm('Enable this listing? It will be visible to buyers again.')) return;
 
-            fetch('../api/manage-listing.php', {
+            fetch('../actions/manage-listing.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -790,7 +849,7 @@ if (isset($_SESSION['user_id'])) {
         }
 
         function addToCart(listingId) {
-            fetch('../api/cart-action.php', {
+            fetch('../actions/cart-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -859,6 +918,148 @@ if (isset($_SESSION['user_id'])) {
         // Update countdown immediately and then every second
         updateCountdown();
         setInterval(updateCountdown, 1000);
+
+        // Bid history functionality
+        <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID'): ?>
+        function loadBidHistory() {
+            fetch('../actions/get-bid-history.php?listing_id=<?php echo $listing_id; ?>')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.bids) {
+                        displayBidHistory(data.bids);
+                    }
+                })
+                .catch(error => console.error('Error loading bid history:', error));
+        }
+
+        function displayBidHistory(bids) {
+            const container = document.getElementById('bid-history-list');
+            if (!container) return;
+
+            if (bids.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #999; padding: 20px;">No bids yet</p>';
+                return;
+            }
+
+            container.innerHTML = bids.map((bid, index) => `
+                <div class="bid-item">
+                    <div class="bid-rank">#${index + 1}</div>
+                    <div class="bid-details">
+                        <div class="bid-user">${bid.username || 'Anonymous'}</div>
+                        <div class="bid-time">${formatDate(bid.created_at)}</div>
+                    </div>
+                    <div class="bid-amount">₱${parseFloat(bid.bid_amount).toLocaleString('en-PH', {minimumFractionDigits: 2})}</div>
+                </div>
+            `).join('');
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diff = now - date;
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (minutes < 1) return 'Just now';
+            if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
+            
+            return date.toLocaleDateString('en-PH', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        // Load bid history on page load
+        loadBidHistory();
+
+        // Refresh bid history every 30 seconds
+        setInterval(loadBidHistory, 30000);
+        <?php endif; ?>
+
+        // Image gallery functionality
+        let currentImageIndex = 0;
+        const images = <?php 
+            // Ensure $images is an array and has image_path key
+            $imageArray = [];
+            if (is_array($images) && !empty($images)) {
+                foreach ($images as $img) {
+                    if (isset($img['image_path'])) {
+                        $imageArray[] = str_replace('../', '', $img['image_path']);
+                    }
+                }
+            }
+            echo json_encode($imageArray);
+        ?>;
+
+        function changeImage(direction) {
+            if (images.length === 0) return;
+            
+            currentImageIndex += direction;
+            if (currentImageIndex < 0) currentImageIndex = images.length - 1;
+            if (currentImageIndex >= images.length) currentImageIndex = 0;
+            
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.src = images[currentImageIndex];
+            }
+            
+            // Update thumbnail selection
+            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
+                thumb.classList.toggle('active', index === currentImageIndex);
+            });
+        }
+
+        function selectImage(index) {
+            if (images.length === 0 || index < 0 || index >= images.length) return;
+            
+            currentImageIndex = index;
+            const mainImage = document.getElementById('mainImage');
+            if (mainImage) {
+                mainImage.src = images[index];
+            }
+            
+            document.querySelectorAll('.thumbnail').forEach((thumb, idx) => {
+                thumb.classList.toggle('active', idx === index);
+            });
+        }
+
+        // Keyboard navigation for image gallery
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowLeft') changeImage(-1);
+            if (e.key === 'ArrowRight') changeImage(1);
+        });
+
+        // Bid form validation
+        <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID' && isset($listing['status']) && $listing['status'] == 'OPEN'): ?>
+        const bidForm = document.getElementById('bid-form');
+        if (bidForm) {
+            bidForm.addEventListener('submit', function(e) {
+                const bidAmount = parseFloat(document.getElementById('bid-amount').value);
+                const currentBid = <?php echo isset($listing['current_bid']) ? $listing['current_bid'] : (isset($listing['starting_price']) ? $listing['starting_price'] : 0); ?>;
+                const minIncrement = <?php echo isset($listing['min_bid_increment']) ? $listing['min_bid_increment'] : 10; ?>;
+                const minBid = currentBid + minIncrement;
+
+                if (bidAmount < minBid) {
+                    e.preventDefault();
+                    alert(`Minimum bid is ₱${minBid.toLocaleString('en-PH', {minimumFractionDigits: 2})}`);
+                    return false;
+                }
+
+                // Show loading state
+                const submitBtn = this.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Placing Bid...';
+            });
+        }
+        <?php endif; ?>
+
+        console.log('Listing details page loaded successfully');
     </script>
 </body>
 </html>

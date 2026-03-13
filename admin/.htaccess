@@ -1,0 +1,8 @@
+# Admin folder configuration
+Options -Indexes
+
+# Allow access to PHP files
+<FilesMatch "\.php$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>

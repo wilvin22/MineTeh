@@ -342,7 +342,13 @@ $cart_items = $supabase->select('cart', '*', ['user_id' => $user_id]);
         function removeFromCart(listingId) {
             if (!confirm('Remove this item from your cart?')) return;
 
-            fetch('../api/cart-action.php', {
+            // Show loading state
+            const button = event.target;
+            const originalText = button.textContent;
+            button.textContent = 'Removing...';
+            button.disabled = true;
+
+            fetch('../actions/cart-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -355,10 +361,25 @@ $cart_items = $supabase->select('cart', '*', ['user_id' => $user_id]);
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    location.reload();
+                    // Show success message briefly before reload
+                    button.textContent = 'Removed!';
+                    button.style.background = '#28a745';
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
                 } else {
-                    alert('Failed to remove item');
+                    alert('Failed to remove item: ' + (data.message || 'Unknown error'));
+                    // Restore button state
+                    button.textContent = originalText;
+                    button.disabled = false;
                 }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error removing item from cart');
+                // Restore button state
+                button.textContent = originalText;
+                button.disabled = false;
             });
         }
     </script>

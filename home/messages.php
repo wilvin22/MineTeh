@@ -354,10 +354,105 @@ if (isset($_GET['conversation_id'])) {
         @media (max-width: 968px) {
             .messages-container {
                 grid-template-columns: 1fr;
+                margin: 10px;
+                height: calc(100vh - 20px);
             }
             
             .conversations-list {
                 display: none;
+            }
+            
+            .conversations-list.show-mobile {
+                display: block;
+            }
+            
+            .chat-area.hide-mobile {
+                display: none;
+            }
+            
+            .message-bubble {
+                max-width: 75%;
+            }
+            
+            .chat-header {
+                padding: 15px;
+            }
+            
+            .messages-area {
+                padding: 15px;
+            }
+            
+            .message-input-area {
+                padding: 15px;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .messages-container {
+                margin: 5px;
+                height: calc(100vh - 10px);
+                border-radius: 8px;
+            }
+            
+            .message-bubble {
+                max-width: 85%;
+                padding: 10px 14px;
+                font-size: 14px;
+            }
+            
+            .chat-user-name {
+                font-size: 16px;
+            }
+            
+            .chat-listing-info {
+                font-size: 12px;
+            }
+            
+            .message-input {
+                padding: 10px 14px;
+                font-size: 14px;
+            }
+            
+            .send-btn {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+            
+            .conversation-item {
+                padding: 12px 15px;
+            }
+            
+            .conversation-avatar {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+            
+            .conversations-header {
+                padding: 15px;
+                font-size: 18px;
+            }
+        }
+        
+        /* Mobile navigation buttons */
+        .mobile-nav-btn {
+            display: none;
+            padding: 8px 16px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        @media (max-width: 968px) {
+            .mobile-nav-btn {
+                display: inline-block;
+            }
+            
+            .mobile-back-btn {
+                margin-right: 10px;
             }
         }
     </style>
@@ -366,7 +461,14 @@ if (isset($_GET['conversation_id'])) {
     <?php include '../sidebar/sidebar.php'; ?>
     
     <div class="main-wrapper">
-        <div class="messages-container">
+        <!-- Mobile Navigation -->
+        <div style="padding: 10px; display: none;" class="mobile-nav-container">
+            <button class="mobile-nav-btn mobile-back-btn" onclick="showConversations()">
+                ← Back to Conversations
+            </button>
+        </div>
+        
+        <div class="messages-container" id="messagesContainer">
             <!-- Conversations List -->
             <div class="conversations-list">
                 <div class="conversations-header">Messages</div>
@@ -475,6 +577,55 @@ if (isset($_GET['conversation_id'])) {
     <script>
         const conversationId = <?php echo $selected_conversation ? $selected_conversation['conversation_id'] : 'null'; ?>;
         const currentUserId = <?php echo $user_id; ?>;
+        
+        // Mobile navigation functions
+        function showConversations() {
+            const container = document.getElementById('messagesContainer');
+            const conversationsList = container.querySelector('.conversations-list');
+            const chatArea = container.querySelector('.chat-area');
+            const mobileNav = document.querySelector('.mobile-nav-container');
+            
+            if (conversationsList && chatArea) {
+                conversationsList.classList.add('show-mobile');
+                chatArea.classList.add('hide-mobile');
+                if (mobileNav) mobileNav.style.display = 'none';
+            }
+        }
+        
+        function showChat() {
+            const container = document.getElementById('messagesContainer');
+            const conversationsList = container.querySelector('.conversations-list');
+            const chatArea = container.querySelector('.chat-area');
+            const mobileNav = document.querySelector('.mobile-nav-container');
+            
+            if (conversationsList && chatArea) {
+                conversationsList.classList.remove('show-mobile');
+                chatArea.classList.remove('hide-mobile');
+                if (mobileNav && window.innerWidth <= 968) {
+                    mobileNav.style.display = 'block';
+                }
+            }
+        }
+        
+        // Show chat on mobile when conversation is selected
+        if (conversationId && window.innerWidth <= 968) {
+            showChat();
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            const mobileNav = document.querySelector('.mobile-nav-container');
+            if (window.innerWidth > 968) {
+                if (mobileNav) mobileNav.style.display = 'none';
+                const container = document.getElementById('messagesContainer');
+                const conversationsList = container.querySelector('.conversations-list');
+                const chatArea = container.querySelector('.chat-area');
+                if (conversationsList) conversationsList.classList.remove('show-mobile');
+                if (chatArea) chatArea.classList.remove('hide-mobile');
+            } else if (conversationId) {
+                if (mobileNav) mobileNav.style.display = 'block';
+            }
+        });
         
         // Auto-scroll to bottom of messages
         function scrollToBottom() {

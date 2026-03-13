@@ -110,4 +110,21 @@ class NotificationsHelper {
         );
     }
 }
+
+// Standalone helper function for quick notification creation
+function create_notification($user_id, $type, $message, $listing_id = null) {
+    global $supabase;
+    
+    $data = [
+        'user_id' => $user_id,
+        'type' => $type,
+        'title' => ucfirst(str_replace('_', ' ', $type)),
+        'message' => $message,
+        'link' => $listing_id ? "listing-details.php?id=$listing_id" : null,
+        'is_read' => false,
+        'created_at' => date('Y-m-d H:i:s')
+    ];
+    
+    return $supabase->insert('notifications', $data);
+}
 ?>

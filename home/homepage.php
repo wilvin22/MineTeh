@@ -4,11 +4,48 @@ session_start();
 // Set timezone to match your local timezone
 date_default_timezone_set('Asia/Manila'); // Change this to your timezone
 
+include '../config.php';
 include '../database/supabase.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
+}
+
+// Check if user is restricted and if restriction has expired
+$user_status = isset($_SESSION['user_status']) ? $_SESSION['user_status'] : 'active';
+$restriction_notice = null;
+$restriction_error = isset($_GET['error']) && $_GET['error'] === 'restricted';
+
+// Always fetch fresh user status from database to catch admin changes
+$user = $supabase->select('accounts', '*', ['account_id' => $_SESSION['user_id']], true);
+
+if ($user && is_array($user)) {
+    $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
+    $_SESSION['user_status'] = $user_status; // Update session with fresh status
+    
+    if ($user_status === 'restricted' || $restriction_error) {
+        $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
+        
+        if ($restriction_until && strtotime($restriction_until) <= time()) {
+            // Restriction expired, reactivate user
+            $supabase->update('accounts', [
+                'user_status' => 'active',
+                'restriction_until' => null,
+                'status_reason' => null
+            ], ['account_id' => $_SESSION['user_id']]);
+            $_SESSION['user_status'] = 'active';
+            $user_status = 'active';
+        } else {
+            $reason = isset($user['status_reason']) ? $user['status_reason'] : 'No reason provided';
+            $until_text = $restriction_until ? ' until ' . date('F j, Y g:i A', strtotime($restriction_until)) : ' permanently';
+            $restriction_notice = [
+                'reason' => $reason,
+                'until' => $until_text,
+                'from_action' => $restriction_error // Flag to show it came from a blocked action
+            ];
+        }
+    }
 }
 
 ?>
@@ -31,6 +68,83 @@ body {
 #main-content {
     flex-grow: 1;
     padding: 30px;
+}
+
+/* Search Section Styles */
+.search-section {
+    margin-bottom: 25px;
+}
+
+.search-container {
+    position: relative;
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.search-icon {
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: #999;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.search-input {
+    width: 100%;
+    padding: 18px 60px 18px 55px;
+    border: 2px solid #e9ecef;
+    border-radius: 50px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #333;
+    background: white;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #945a9b;
+    box-shadow: 0 4px 16px rgba(148, 90, 155, 0.15);
+}
+
+.search-input::placeholder {
+    color: #999;
+}
+
+.clear-search-btn {
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #e9ecef;
+    border: none;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    transition: all 0.2s ease;
+    z-index: 2;
+}
+
+.clear-search-btn:hover {
+    background: #945a9b;
+    color: white;
+    transform: translateY(-50%) scale(1.1);
+}
+
+.search-highlight {
+    background: linear-gradient(135deg, #fff3cd, #ffe69c);
+    border: 2px solid #945a9b !important;
+    box-shadow: 0 6px 20px rgba(148, 90, 155, 0.25) !important;
 }
 
 .filter-section {
@@ -310,6 +424,165 @@ body {
     content: '🤍';
 }
 
+/* Mobile Responsive Styles */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    #main-content {
+        padding: 15px;
+    }
+
+    .search-section {
+        margin-bottom: 20px;
+    }
+
+    .search-input {
+        padding: 15px 50px 15px 45px;
+        font-size: 15px;
+    }
+
+    .search-icon {
+        left: 15px;
+        font-size: 18px;
+    }
+
+    .clear-search-btn {
+        right: 15px;
+        width: 26px;
+        height: 26px;
+        font-size: 13px;
+    }
+
+    .filter-section {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 15px;
+    }
+
+    .filter-tabs {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .filter-tab {
+        padding: 10px 16px;
+        font-size: 14px;
+        flex: 1;
+        min-width: 100px;
+        justify-content: center;
+    }
+
+    .category-filter {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .category-filter label {
+        justify-content: center;
+    }
+
+    .category-dropdown {
+        width: 100%;
+        min-width: auto;
+    }
+
+    #listings-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 12px;
+    }
+
+    .listing-card {
+        border-radius: 8px;
+    }
+
+    .listing-image img {
+        height: 140px;
+    }
+
+    .listing-content {
+        padding: 10px;
+    }
+
+    .listing-price {
+        font-size: 16px;
+    }
+
+    .listing-title {
+        font-size: 13px;
+    }
+
+    .listing-meta {
+        font-size: 11px;
+    }
+
+    .listing-owner-badge,
+    .edit-listing-btn {
+        font-size: 10px;
+        padding: 4px 8px;
+    }
+
+    .favorite-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 18px;
+    }
+
+    .auction-timer {
+        font-size: 10px;
+        padding: 4px 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    #main-content {
+        padding: 10px;
+    }
+
+    .filter-tab {
+        padding: 8px 12px;
+        font-size: 13px;
+    }
+
+    .filter-tab .tab-icon {
+        font-size: 16px;
+    }
+
+    #listings-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .listing-image img {
+        height: 120px;
+    }
+
+    .listing-content {
+        padding: 8px;
+    }
+
+    .listing-price {
+        font-size: 14px;
+    }
+
+    .listing-title {
+        font-size: 12px;
+    }
+
+    .listing-meta {
+        font-size: 10px;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .listing-badge {
+        font-size: 10px;
+        padding: 2px 6px;
+    }
+}
+
 </style>
 
 </head>
@@ -318,6 +591,38 @@ body {
     <?php include '../sidebar/sidebar.php'; ?>
     
     <div id="main-content" class="main-wrapper">
+        <?php if ($restriction_notice): ?>
+        <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a6f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="font-size: 40px;">⚠️</div>
+                <div style="flex: 1;">
+                    <h3 style="margin: 0 0 10px 0; font-size: 20px;">
+                        <?php echo $restriction_notice['from_action'] ? 'Action Blocked - Account Restricted' : 'Your Account is Restricted'; ?>
+                    </h3>
+                    <p style="margin: 0 0 8px 0; opacity: 0.95;">
+                        <?php if ($restriction_notice['from_action']): ?>
+                            You cannot place bids or create listings<?php echo $restriction_notice['until']; ?>.
+                        <?php else: ?>
+                            You cannot create listings or place bids<?php echo $restriction_notice['until']; ?>.
+                        <?php endif; ?>
+                    </p>
+                    <div style="background: rgba(255,255,255,0.2); padding: 10px; border-radius: 6px; font-size: 14px;">
+                        <strong>Reason:</strong> <?php echo htmlspecialchars($restriction_notice['reason']); ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Search Bar -->
+        <div class="search-section">
+            <div class="search-container">
+                <div class="search-icon">🔍</div>
+                <input type="text" id="search-input" class="search-input" placeholder="Search for items, categories, or locations...">
+                <button id="clear-search" class="clear-search-btn" style="display: none;">✕</button>
+            </div>
+        </div>
+
         <!-- Filter Section -->
         <div class="filter-section">
             <!-- Listing Type Tabs -->
@@ -408,7 +713,7 @@ body {
                         $is_own_listing = isset($_SESSION['user_id']) && $_SESSION['user_id'] == $seller_id;
 
                         // Get image from batch results
-                        $listing_image = isset($allImages[$listing_id]) ? $allImages[$listing_id] : "../assets/no-image.png";
+                        $listing_image = isset($allImages[$listing_id]) ? getImageUrl($allImages[$listing_id]) : getImageUrl('');
 
                         // Check if user has favorited this listing from batch results
                         $is_favorited = in_array($listing_id, $userFavorites);
@@ -451,29 +756,53 @@ body {
         const filterTabs = document.querySelectorAll('.filter-tab');
         const categorySelect = document.getElementById('category-select');
         const listingCards = document.querySelectorAll('.listing-card');
+        const searchInput = document.getElementById('search-input');
+        const clearSearchBtn = document.getElementById('clear-search');
 
         let currentTypeFilter = 'all';
         let currentCategoryFilter = 'all';
+        let currentSearchQuery = '';
 
         function applyFilters() {
             let visibleCount = 0;
+            const searchLower = currentSearchQuery.toLowerCase().trim();
 
             listingCards.forEach(card => {
                 const cardType = card.dataset.type;
                 const cardCategory = card.dataset.category;
+                
+                // Get card text content for search
+                const title = card.querySelector('.listing-title')?.textContent.toLowerCase() || '';
+                const location = card.querySelector('.listing-meta span:first-child')?.textContent.toLowerCase() || '';
+                const price = card.querySelector('.listing-price')?.textContent.toLowerCase() || '';
 
                 // Check type filter
                 const typeMatch = currentTypeFilter === 'all' || cardType === currentTypeFilter;
                 
                 // Check category filter
                 const categoryMatch = currentCategoryFilter === 'all' || cardCategory === currentCategoryFilter;
+                
+                // Check search query
+                const searchMatch = searchLower === '' || 
+                                  title.includes(searchLower) || 
+                                  location.includes(searchLower) ||
+                                  price.includes(searchLower);
 
-                // Show card only if both filters match
-                if (typeMatch && categoryMatch) {
+                // Show card only if all filters match
+                if (typeMatch && categoryMatch && searchMatch) {
                     card.style.display = 'block';
+                    
+                    // Highlight matching cards when searching
+                    if (searchLower !== '') {
+                        card.classList.add('search-highlight');
+                    } else {
+                        card.classList.remove('search-highlight');
+                    }
+                    
                     visibleCount++;
                 } else {
                     card.style.display = 'none';
+                    card.classList.remove('search-highlight');
                 }
             });
 
@@ -488,10 +817,49 @@ body {
                 const emptyState = document.createElement('div');
                 emptyState.className = 'empty-state';
                 emptyState.style.cssText = 'grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #999;';
-                emptyState.innerHTML = '<div style="font-size: 48px; margin-bottom: 16px;">📦</div><h2>No listings found</h2><p>Try selecting different filters</p>';
+                
+                let emptyMessage = '<div style="font-size: 48px; margin-bottom: 16px;">🔍</div>';
+                if (searchLower !== '') {
+                    emptyMessage += `<h2>No results found for "${currentSearchQuery}"</h2><p>Try different keywords or clear your search</p>`;
+                } else {
+                    emptyMessage += '<h2>No listings found</h2><p>Try selecting different filters</p>';
+                }
+                
+                emptyState.innerHTML = emptyMessage;
                 grid.appendChild(emptyState);
             }
         }
+
+        // Search functionality
+        searchInput.addEventListener('input', (e) => {
+            currentSearchQuery = e.target.value;
+            
+            // Show/hide clear button
+            if (currentSearchQuery.trim() !== '') {
+                clearSearchBtn.style.display = 'flex';
+            } else {
+                clearSearchBtn.style.display = 'none';
+            }
+            
+            applyFilters();
+        });
+
+        // Clear search button
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            currentSearchQuery = '';
+            clearSearchBtn.style.display = 'none';
+            searchInput.focus();
+            applyFilters();
+        });
+
+        // Allow Enter key to trigger search
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyFilters();
+            }
+        });
 
         // Type filter tabs
         filterTabs.forEach(tab => {
@@ -546,7 +914,7 @@ body {
             const btn = event.currentTarget;
             const isFavorited = btn.classList.contains('favorited');
             
-            fetch('../api/favorite-action.php', {
+            fetch('../actions/favorite-action.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
