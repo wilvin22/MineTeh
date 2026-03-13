@@ -444,6 +444,53 @@ if (isset($_POST['create_listing'])) {
             margin-top: 6px;
         }
 
+        /* Upload Info Banner */
+        .upload-info-banner {
+            background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
+            border: 2px solid #2196F3;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+        }
+
+        .info-icon {
+            font-size: 28px;
+            flex-shrink: 0;
+        }
+
+        .info-content {
+            flex: 1;
+        }
+
+        .info-content strong {
+            color: #1976D2;
+            font-size: 16px;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .info-content ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .info-content li {
+            padding: 6px 0;
+            color: #555;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .info-content li strong {
+            display: inline;
+            color: #1976D2;
+            font-size: 14px;
+        }
+
         /* Photo Upload Section */
         .photo-upload-area {
             border: 3px dashed #ddd;
@@ -479,6 +526,34 @@ if (isset($_POST['create_listing'])) {
         .upload-hint {
             font-size: 13px;
             color: #999;
+            margin-bottom: 15px;
+        }
+
+        .upload-counter {
+            display: inline-block;
+            background: white;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #666;
+            border: 2px solid #ddd;
+            margin-top: 10px;
+        }
+
+        .upload-counter #currentCount {
+            color: #945a9b;
+            font-size: 18px;
+        }
+
+        .upload-counter.limit-reached {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+
+        .upload-counter.limit-reached #currentCount {
+            color: #dc3545;
         }
 
         #preview {
@@ -901,6 +976,97 @@ if (isset($_POST['create_listing'])) {
             border: 1px solid #f5c6cb;
         }
 
+        /* Location Autocomplete Styles */
+        .location-input-wrapper {
+            position: relative;
+        }
+
+        .location-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+        }
+
+        .location-suggestions.active {
+            display: block;
+        }
+
+        .location-suggestion-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .location-suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .location-suggestion-item:hover {
+            background: #f8f9fa;
+        }
+
+        .location-suggestion-item.selected {
+            background: #e9ecef;
+        }
+
+        .location-icon {
+            color: #945a9b;
+            font-size: 16px;
+        }
+
+        .location-text {
+            flex: 1;
+        }
+
+        .location-name {
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .location-details {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .location-loading {
+            padding: 15px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .location-no-results {
+            padding: 15px;
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+        }
+
+        .location-hint {
+            margin-top: 8px;
+        }
+
+        #locationInput:focus {
+            border-color: #945a9b;
+            box-shadow: 0 0 0 3px rgba(148, 90, 155, 0.1);
+        }
+
         @media (max-width: 768px) {
             .form-grid,
             .listing-type-cards {
@@ -946,15 +1112,34 @@ if (isset($_POST['create_listing'])) {
                 <div class="form-section">
                     <div class="section-header">
                         <div class="section-icon">📸</div>
-                        <div class="section-title">Photos</div>
+                        <div class="section-title">Product Photos</div>
+                    </div>
+                    
+                    <!-- Upload Limit Info Banner -->
+                    <div class="upload-info-banner">
+                        <div class="info-icon">ℹ️</div>
+                        <div class="info-content">
+                            <strong>Photo Requirements:</strong>
+                            <ul>
+                                <li>📷 <strong>Maximum 5 photos</strong> per listing</li>
+                                <li>✅ Accepted formats: JPG, PNG, WEBP, GIF</li>
+                                <li>❌ Videos are not supported</li>
+                                <li>💡 First photo will be the main display image</li>
+                            </ul>
+                        </div>
                     </div>
                     
                     <div class="photo-upload-area" onclick="document.getElementById('photos').click()">
                         <div class="upload-icon">🖼️</div>
-                        <div class="upload-text">Click to upload photos <span class="required">*</span></div>
-                        <div class="upload-hint">or drag and drop (Max 5 photos, JPG/PNG/WEBP/GIF)</div>
+                        <div class="upload-text">
+                            Click to upload photos <span class="required">*</span>
+                        </div>
+                        <div class="upload-hint">or drag and drop images here</div>
+                        <div class="upload-counter" id="uploadCounter">
+                            <span id="currentCount">0</span> / 5 photos selected
+                        </div>
                     </div>
-                    <input type="file" id="photos" name="photos[]" accept="image/*" multiple hidden <?php echo !$edit_mode ? 'required' : ''; ?>>
+                    <input type="file" id="photos" name="photos[]" accept="image/jpeg,image/png,image/webp,image/gif" multiple hidden <?php echo !$edit_mode ? 'required' : ''; ?>>
                     
                     <?php if ($edit_mode && !empty($listing_images)): ?>
                     <div id="existing-images" style="margin-top: 20px;">
@@ -1025,7 +1210,21 @@ if (isset($_POST['create_listing'])) {
 
                         <div class="form-group">
                             <label>Location <span class="required">*</span></label>
-                            <input type="text" name="location" placeholder="e.g., Manila, Philippines" value="<?php echo $edit_mode ? htmlspecialchars($listing_data['location'] ?? '') : ''; ?>" required>
+                            <div class="location-input-wrapper" style="position: relative;">
+                                <input type="text" 
+                                       id="locationInput"
+                                       name="location" 
+                                       placeholder="Start typing your location (e.g., Manila, Quezon City, Cebu...)" 
+                                       value="<?php echo $edit_mode ? htmlspecialchars($listing_data['location'] ?? '') : ''; ?>" 
+                                       autocomplete="off"
+                                       required>
+                                <div id="locationSuggestions" class="location-suggestions"></div>
+                                <div class="location-hint">
+                                    <span style="font-size: 12px; color: #666;">
+                                        💡 Type your city, municipality, or barangay in the Philippines
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1178,6 +1377,211 @@ if (isset($_POST['create_listing'])) {
     </div>
 
     <script>
+        // ===== LOCATION AUTOCOMPLETE =====
+        const locationInput = document.getElementById('locationInput');
+        const suggestionsContainer = document.getElementById('locationSuggestions');
+        let debounceTimer;
+        let selectedIndex = -1;
+        let suggestions = [];
+
+        // Philippine locations database (common cities and provinces)
+        const philippineLocations = [
+            // NCR
+            'Manila, Metro Manila', 'Quezon City, Metro Manila', 'Makati, Metro Manila', 
+            'Pasig, Metro Manila', 'Taguig, Metro Manila', 'Mandaluyong, Metro Manila',
+            'Pasay, Metro Manila', 'Parañaque, Metro Manila', 'Las Piñas, Metro Manila',
+            'Muntinlupa, Metro Manila', 'Caloocan, Metro Manila', 'Malabon, Metro Manila',
+            'Navotas, Metro Manila', 'Valenzuela, Metro Manila', 'Marikina, Metro Manila',
+            'San Juan, Metro Manila', 'Pateros, Metro Manila',
+            
+            // Luzon
+            'Baguio City, Benguet', 'Dagupan City, Pangasinan', 'San Fernando, Pampanga',
+            'Angeles City, Pampanga', 'Olongapo City, Zambales', 'Batangas City, Batangas',
+            'Lipa City, Batangas', 'Lucena City, Quezon', 'Naga City, Camarines Sur',
+            'Legazpi City, Albay', 'Cabanatuan City, Nueva Ecija', 'San Jose, Nueva Ecija',
+            'Tarlac City, Tarlac', 'Urdaneta, Pangasinan', 'Vigan City, Ilocos Sur',
+            'Laoag City, Ilocos Norte', 'Tuguegarao, Cagayan', 'Cauayan, Isabela',
+            'Santiago City, Isabela', 'Antipolo, Rizal', 'Bacoor, Cavite', 'Dasmariñas, Cavite',
+            'Imus, Cavite', 'Cavite City, Cavite', 'Tagaytay, Cavite', 'Biñan, Laguna',
+            'Santa Rosa, Laguna', 'Calamba, Laguna', 'San Pablo, Laguna',
+            
+            // Visayas
+            'Cebu City, Cebu', 'Mandaue City, Cebu', 'Lapu-Lapu City, Cebu', 'Talisay, Cebu',
+            'Toledo City, Cebu', 'Iloilo City, Iloilo', 'Bacolod City, Negros Occidental',
+            'Dumaguete City, Negros Oriental', 'Tacloban City, Leyte', 'Ormoc City, Leyte',
+            'Calbayog City, Samar', 'Catbalogan, Samar', 'Tagbilaran City, Bohol',
+            'Roxas City, Capiz', 'Kalibo, Aklan', 'Boracay, Aklan',
+            
+            // Mindanao
+            'Davao City, Davao del Sur', 'Cagayan de Oro, Misamis Oriental', 
+            'General Santos City, South Cotabato', 'Zamboanga City, Zamboanga del Sur',
+            'Butuan City, Agusan del Norte', 'Iligan City, Lanao del Norte',
+            'Cotabato City, Maguindanao', 'Dipolog City, Zamboanga del Norte',
+            'Pagadian City, Zamboanga del Sur', 'Koronadal City, South Cotabato',
+            'Kidapawan City, Cotabato', 'Tagum City, Davao del Norte',
+            'Mati City, Davao Oriental', 'Digos City, Davao del Sur'
+        ];
+
+        locationInput.addEventListener('input', function() {
+            clearTimeout(debounceTimer);
+            const query = this.value.trim();
+            
+            if (query.length < 2) {
+                hideSuggestions();
+                return;
+            }
+            
+            debounceTimer = setTimeout(() => {
+                searchLocations(query);
+            }, 300);
+        });
+
+        function searchLocations(query) {
+            // Filter Philippine locations
+            const filtered = philippineLocations.filter(location => 
+                location.toLowerCase().includes(query.toLowerCase())
+            );
+            
+            suggestions = filtered.slice(0, 8); // Limit to 8 results
+            
+            if (suggestions.length > 0) {
+                displaySuggestions(suggestions);
+            } else {
+                // Fallback to Nominatim API for more locations
+                fetchFromNominatim(query);
+            }
+        }
+
+        function fetchFromNominatim(query) {
+            showLoading();
+            
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query + ', Philippines')}&limit=8&addressdetails=1`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        suggestions = data.map(item => {
+                            const address = item.address || {};
+                            const city = address.city || address.town || address.village || address.municipality || '';
+                            const province = address.state || address.province || '';
+                            return city && province ? `${city}, ${province}` : item.display_name;
+                        });
+                        displaySuggestions(suggestions);
+                    } else {
+                        showNoResults();
+                    }
+                })
+                .catch(error => {
+                    console.error('Location search error:', error);
+                    showNoResults();
+                });
+        }
+
+        function displaySuggestions(items) {
+            suggestionsContainer.innerHTML = '';
+            selectedIndex = -1;
+            
+            items.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'location-suggestion-item';
+                div.dataset.index = index;
+                
+                const parts = item.split(',');
+                const city = parts[0]?.trim() || '';
+                const province = parts[1]?.trim() || '';
+                
+                div.innerHTML = `
+                    <span class="location-icon">📍</span>
+                    <div class="location-text">
+                        <div class="location-name">${city}</div>
+                        ${province ? `<div class="location-details">${province}</div>` : ''}
+                    </div>
+                `;
+                
+                div.addEventListener('click', () => selectSuggestion(item));
+                div.addEventListener('mouseenter', () => {
+                    selectedIndex = index;
+                    updateSelection();
+                });
+                
+                suggestionsContainer.appendChild(div);
+            });
+            
+            suggestionsContainer.classList.add('active');
+        }
+
+        function showLoading() {
+            suggestionsContainer.innerHTML = '<div class="location-loading">🔍 Searching locations...</div>';
+            suggestionsContainer.classList.add('active');
+        }
+
+        function showNoResults() {
+            suggestionsContainer.innerHTML = '<div class="location-no-results">No locations found. Try a different search.</div>';
+            suggestionsContainer.classList.add('active');
+        }
+
+        function selectSuggestion(location) {
+            locationInput.value = location;
+            hideSuggestions();
+            locationInput.focus();
+        }
+
+        function hideSuggestions() {
+            suggestionsContainer.classList.remove('active');
+            suggestionsContainer.innerHTML = '';
+            selectedIndex = -1;
+        }
+
+        function updateSelection() {
+            const items = suggestionsContainer.querySelectorAll('.location-suggestion-item');
+            items.forEach((item, index) => {
+                item.classList.toggle('selected', index === selectedIndex);
+            });
+        }
+
+        // Keyboard navigation
+        locationInput.addEventListener('keydown', function(e) {
+            const items = suggestionsContainer.querySelectorAll('.location-suggestion-item');
+            
+            if (!suggestionsContainer.classList.contains('active') || items.length === 0) {
+                return;
+            }
+            
+            switch(e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+                    updateSelection();
+                    items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+                    break;
+                    
+                case 'ArrowUp':
+                    e.preventDefault();
+                    selectedIndex = Math.max(selectedIndex - 1, 0);
+                    updateSelection();
+                    items[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+                    break;
+                    
+                case 'Enter':
+                    e.preventDefault();
+                    if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+                        selectSuggestion(suggestions[selectedIndex]);
+                    }
+                    break;
+                    
+                case 'Escape':
+                    hideSuggestions();
+                    break;
+            }
+        });
+
+        // Close suggestions when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!locationInput.contains(e.target) && !suggestionsContainer.contains(e.target)) {
+                hideSuggestions();
+            }
+        });
+
+        // ===== PHOTO UPLOAD =====
         const photosInput = document.getElementById('photos');
         const preview = document.getElementById('preview');
         const uploadArea = document.querySelector('.photo-upload-area');
@@ -1204,19 +1608,46 @@ if (isset($_POST['create_listing'])) {
             const datatransfer = new DataTransfer();
             filesArray.forEach(file => datatransfer.items.add(file));
             photosInput.files = datatransfer.files;
+            updatePhotoCounter();
+        }
+
+        function updatePhotoCounter() {
+            const counter = document.getElementById('uploadCounter');
+            const currentCount = document.getElementById('currentCount');
+            const count = filesArray.length;
+            
+            if (currentCount) {
+                currentCount.textContent = count;
+            }
+            
+            if (counter) {
+                if (count >= 5) {
+                    counter.classList.add('limit-reached');
+                    counter.innerHTML = '<span id="currentCount">5</span> / 5 photos (Maximum reached)';
+                } else {
+                    counter.classList.remove('limit-reached');
+                }
+            }
         }
 
         function handleFiles(files) {
             const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+            let rejectedFiles = [];
+            let videoFiles = [];
             
             files.forEach(file => {
                 if (filesArray.length >= 5) {
-                    alert('Maximum 5 photos allowed');
+                    return;
+                }
+                
+                // Check if it's a video
+                if (file.type.startsWith('video/')) {
+                    videoFiles.push(file.name);
                     return;
                 }
                 
                 if (!allowedTypes.includes(file.type)) {
-                    alert(`"${file.name}" is not a supported format`);
+                    rejectedFiles.push(file.name);
                     return;
                 }
                 
@@ -1245,6 +1676,19 @@ if (isset($_POST['create_listing'])) {
             });
             
             syncFiles();
+            
+            // Show error messages for rejected files
+            if (filesArray.length >= 5 && files.length > filesArray.length) {
+                alert('⚠️ Maximum Limit Reached\n\nYou can only upload 5 photos per listing. Some files were not added.');
+            }
+            
+            if (videoFiles.length > 0) {
+                alert('❌ Videos Not Supported\n\nThe following files were rejected because videos are not allowed:\n\n' + videoFiles.join('\n') + '\n\nPlease upload images only (JPG, PNG, WEBP, GIF).');
+            }
+            
+            if (rejectedFiles.length > 0 && videoFiles.length === 0) {
+                alert('❌ Unsupported File Format\n\nThe following files were rejected:\n\n' + rejectedFiles.join('\n') + '\n\nSupported formats: JPG, PNG, WEBP, GIF');
+            }
         }
 
         photosInput.addEventListener('change', function() {

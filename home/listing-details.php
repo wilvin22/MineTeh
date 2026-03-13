@@ -182,6 +182,7 @@ if (isset($_SESSION['user_id'])) {
             position: relative;
             background: #f0f0f0;
             height: 500px;
+            overflow: hidden;
         }
 
         .main-image {
@@ -189,6 +190,84 @@ if (isset($_SESSION['user_id'])) {
             height: 100%;
             object-fit: contain;
             background: #000;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Carousel Navigation Arrows */
+        .carousel-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .carousel-arrow:hover {
+            background: rgba(148, 90, 155, 0.9);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .carousel-arrow.prev {
+            left: 15px;
+        }
+
+        .carousel-arrow.next {
+            right: 15px;
+        }
+
+        .carousel-arrow:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Image Counter */
+        .image-counter {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        /* Fullscreen Button */
+        .fullscreen-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .fullscreen-btn:hover {
+            background: rgba(148, 90, 155, 0.9);
+            transform: scale(1.1);
         }
 
         .image-thumbnails {
@@ -197,22 +276,109 @@ if (isset($_SESSION['user_id'])) {
             padding: 15px;
             overflow-x: auto;
             background: #fafafa;
+            scrollbar-width: thin;
+            scrollbar-color: #945a9b #f0f0f0;
+        }
+
+        .image-thumbnails::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .image-thumbnails::-webkit-scrollbar-track {
+            background: #f0f0f0;
+        }
+
+        .image-thumbnails::-webkit-scrollbar-thumb {
+            background: #945a9b;
+            border-radius: 4px;
         }
 
         .thumbnail {
             width: 80px;
             height: 80px;
+            min-width: 80px;
             object-fit: cover;
             border-radius: 8px;
             cursor: pointer;
-            border: 2px solid transparent;
+            border: 3px solid transparent;
             transition: all 0.2s ease;
+            position: relative;
         }
 
-        .thumbnail:hover,
+        .thumbnail:hover {
+            border-color: #945a9b;
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(148, 90, 155, 0.3);
+        }
+
         .thumbnail.active {
             border-color: #945a9b;
             transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(148, 90, 155, 0.5);
+        }
+
+        .thumbnail.active::after {
+            content: '✓';
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #945a9b;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Fullscreen Modal */
+        .fullscreen-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fullscreen-modal.active {
+            display: flex;
+        }
+
+        .fullscreen-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .fullscreen-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .fullscreen-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
         }
 
         .listing-info {
@@ -458,13 +624,30 @@ if (isset($_SESSION['user_id'])) {
             <div class="listing-content">
                 <!-- Main Content -->
                 <div class="listing-main">
-                    <!-- Image Gallery -->
+                    <!-- Image Gallery with Carousel -->
                     <div class="image-gallery">
                         <?php if (!empty($images)): ?>
                             <img src="<?php echo htmlspecialchars(getImageUrl($images[0]['image_path'])); ?>" 
                                  alt="<?php echo htmlspecialchars($listing['title']); ?>" 
                                  class="main-image" 
                                  id="mainImage">
+                            
+                            <?php if (count($images) > 1): ?>
+                                <button class="carousel-arrow prev" onclick="changeImageCarousel(-1)" aria-label="Previous image">
+                                    ‹
+                                </button>
+                                <button class="carousel-arrow next" onclick="changeImageCarousel(1)" aria-label="Next image">
+                                    ›
+                                </button>
+                            <?php endif; ?>
+                            
+                            <div class="image-counter">
+                                <span id="currentImageNum">1</span> / <?php echo count($images); ?>
+                            </div>
+                            
+                            <button class="fullscreen-btn" onclick="openFullscreen()" aria-label="View fullscreen">
+                                ⛶
+                            </button>
                         <?php else: ?>
                             <img src="<?php echo getImageUrl(''); ?>" alt="No image" class="main-image" id="mainImage">
                         <?php endif; ?>
@@ -476,7 +659,8 @@ if (isset($_SESSION['user_id'])) {
                             <img src="<?php echo htmlspecialchars(getImageUrl($image['image_path'])); ?>" 
                                  alt="Thumbnail <?php echo $index + 1; ?>" 
                                  class="thumbnail <?php echo $index === 0 ? 'active' : ''; ?>"
-                                 onclick="changeImage(this)">
+                                 onclick="selectImageByIndex(<?php echo $index; ?>)"
+                                 data-index="<?php echo $index; ?>">
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
@@ -714,14 +898,137 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
+    <!-- Fullscreen Image Modal -->
+    <div class="fullscreen-modal" id="fullscreenModal" onclick="closeFullscreen()">
+        <button class="fullscreen-close" onclick="closeFullscreen()" aria-label="Close fullscreen">×</button>
+        <img id="fullscreenImage" src="" alt="Fullscreen view">
+    </div>
+
     <script>
-        function changeImage(thumbnail) {
-            const mainImage = document.getElementById('mainImage');
-            mainImage.src = thumbnail.src;
+        // Image Carousel State
+        let currentImageIndex = 0;
+        const imageUrls = <?php 
+            $imageArray = [];
+            if (is_array($images) && !empty($images)) {
+                foreach ($images as $img) {
+                    if (isset($img['image_path'])) {
+                        $imageArray[] = htmlspecialchars(getImageUrl($img['image_path']));
+                    }
+                }
+            }
+            echo json_encode($imageArray);
+        ?>;
+        const totalImages = imageUrls.length;
+
+        // Change image using carousel arrows
+        function changeImageCarousel(direction) {
+            if (totalImages === 0) return;
             
-            // Update active thumbnail
-            document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('active'));
-            thumbnail.classList.add('active');
+            currentImageIndex += direction;
+            
+            // Loop around
+            if (currentImageIndex < 0) {
+                currentImageIndex = totalImages - 1;
+            } else if (currentImageIndex >= totalImages) {
+                currentImageIndex = 0;
+            }
+            
+            updateMainImage();
+        }
+
+        // Select image by clicking thumbnail
+        function selectImageByIndex(index) {
+            if (index < 0 || index >= totalImages) return;
+            currentImageIndex = index;
+            updateMainImage();
+        }
+
+        // Update the main image and UI
+        function updateMainImage() {
+            const mainImage = document.getElementById('mainImage');
+            const imageCounter = document.getElementById('currentImageNum');
+            
+            if (mainImage && imageUrls[currentImageIndex]) {
+                // Fade effect
+                mainImage.style.opacity = '0';
+                setTimeout(() => {
+                    mainImage.src = imageUrls[currentImageIndex];
+                    mainImage.style.opacity = '1';
+                }, 150);
+            }
+            
+            // Update counter
+            if (imageCounter) {
+                imageCounter.textContent = currentImageIndex + 1;
+            }
+            
+            // Update thumbnails
+            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
+                thumb.classList.toggle('active', index === currentImageIndex);
+            });
+            
+            // Scroll thumbnail into view
+            const activeThumbnail = document.querySelector('.thumbnail.active');
+            if (activeThumbnail) {
+                activeThumbnail.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center'
+                });
+            }
+        }
+
+        // Fullscreen functionality
+        function openFullscreen() {
+            const modal = document.getElementById('fullscreenModal');
+            const fullscreenImage = document.getElementById('fullscreenImage');
+            
+            if (modal && fullscreenImage && imageUrls[currentImageIndex]) {
+                fullscreenImage.src = imageUrls[currentImageIndex];
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeFullscreen() {
+            const modal = document.getElementById('fullscreenModal');
+            if (modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            const modal = document.getElementById('fullscreenModal');
+            const isFullscreen = modal && modal.classList.contains('active');
+            
+            if (e.key === 'ArrowLeft') {
+                changeImageCarousel(-1);
+                if (isFullscreen) {
+                    document.getElementById('fullscreenImage').src = imageUrls[currentImageIndex];
+                }
+            } else if (e.key === 'ArrowRight') {
+                changeImageCarousel(1);
+                if (isFullscreen) {
+                    document.getElementById('fullscreenImage').src = imageUrls[currentImageIndex];
+                }
+            } else if (e.key === 'Escape' && isFullscreen) {
+                closeFullscreen();
+            }
+        });
+
+        // Prevent modal close when clicking on image
+        document.getElementById('fullscreenImage')?.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        // Legacy function for backward compatibility
+        function changeImage(thumbnail) {
+            const index = parseInt(thumbnail.dataset.index);
+            if (!isNaN(index)) {
+                selectImageByIndex(index);
+            }
         }
 
         function toggleFavorite(listingId) {
@@ -981,59 +1288,6 @@ if (isset($_SESSION['user_id'])) {
         // Refresh bid history every 30 seconds
         setInterval(loadBidHistory, 30000);
         <?php endif; ?>
-
-        // Image gallery functionality
-        let currentImageIndex = 0;
-        const images = <?php 
-            // Ensure $images is an array and has image_path key
-            $imageArray = [];
-            if (is_array($images) && !empty($images)) {
-                foreach ($images as $img) {
-                    if (isset($img['image_path'])) {
-                        $imageArray[] = str_replace('../', '', $img['image_path']);
-                    }
-                }
-            }
-            echo json_encode($imageArray);
-        ?>;
-
-        function changeImage(direction) {
-            if (images.length === 0) return;
-            
-            currentImageIndex += direction;
-            if (currentImageIndex < 0) currentImageIndex = images.length - 1;
-            if (currentImageIndex >= images.length) currentImageIndex = 0;
-            
-            const mainImage = document.getElementById('mainImage');
-            if (mainImage) {
-                mainImage.src = images[currentImageIndex];
-            }
-            
-            // Update thumbnail selection
-            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
-                thumb.classList.toggle('active', index === currentImageIndex);
-            });
-        }
-
-        function selectImage(index) {
-            if (images.length === 0 || index < 0 || index >= images.length) return;
-            
-            currentImageIndex = index;
-            const mainImage = document.getElementById('mainImage');
-            if (mainImage) {
-                mainImage.src = images[index];
-            }
-            
-            document.querySelectorAll('.thumbnail').forEach((thumb, idx) => {
-                thumb.classList.toggle('active', idx === index);
-            });
-        }
-
-        // Keyboard navigation for image gallery
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowLeft') changeImage(-1);
-            if (e.key === 'ArrowRight') changeImage(1);
-        });
 
         // Bid form validation
         <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID' && isset($listing['status']) && $listing['status'] == 'OPEN'): ?>
