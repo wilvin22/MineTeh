@@ -1,4 +1,8 @@
 <?php
+// Suppress any PHP warnings/notices that could break JSON response
+error_reporting(E_ALL);
+ini_set('display_errors', '0');
+
 require_once __DIR__ . '/../config.php';
 
 // Get request data
@@ -11,24 +15,12 @@ if (empty($identifier) || empty($password)) {
     sendError('Email/username and password are required');
 }
 
-// Check if user exists
-// Try username first
-$user = $supabase->select('accounts', 'account_id,username,email,password_hash,first_name,last_name', ['username' => $identifier]);
+// Try to find user by email or username using custom query
+$user = $supabase->customQuery('accounts', '*', 'or=(email.eq.' . urlencode($identifier) . ',username.eq.' . urlencode($identifier) . ')&limit=1');
 
-// Debug: Check what we got
 if ($user === false) {
     $error = $supabase->getLastError();
     sendError('Database query failed: ' . json_encode($error), 500);
-}
-
-// If not found by username, try email
-if (empty($user)) {
-    $user = $supabase->select('accounts', 'account_id,username,email,password_hash,first_name,last_name', ['email' => $identifier]);
-    
-    if ($user === false) {
-        $error = $supabase->getLastError();
-        sendError('Database query failed: ' . json_encode($error), 500);
-    }
 }
 
 if (empty($user) || !is_array($user)) {
@@ -42,11 +34,33 @@ if (!password_verify($password, $user['password_hash'])) {
     sendError('Incorrect password', 401);
 }
 
+// Check user status
+$user_status = $user['user_status'] ?? 'active';
+
+if ($user_status === 'banned') {
+    $reason = $user['status_reason'] ?? 'No reason provided';
+    sendError('Your account has been banned. Reason: ' . $reason, 403);
+}
+
+if ($user_status === 'restricted') {
+    // Check if restriction has expired
+    $restriction_until = $user['restriction_until'] ?? null;
+    if ($restriction_until && strtotime($restriction_until) <= time()) {
+        // Restriction expired, reactivate user
+        $supabase->update('accounts', [
+            'user_status' => 'active',
+            'restriction_until' => null,
+            'status_reason' => null
+        ], ['account_id' => $user['account_id']]);
+        $user_status = 'active';
+    }
+}
+
 // Generate token for mobile apps
 $token = bin2hex(random_bytes(32));
 $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
 
-// Store token in sessions table (create table if needed)
+// Store token in sessions table
 $sessionData = [
     'user_id' => $user['account_id'],
     'token' => $token,
@@ -54,14 +68,16 @@ $sessionData = [
     'created_at' => date('Y-m-d H:i:s')
 ];
 
-// Try to insert session (table might not exist yet)
 $supabase->insert('user_sessions', $sessionData);
 
 // Set session for web compatibility
 $_SESSION['user_id'] = $user['account_id'];
 $_SESSION['username'] = $user['username'];
+$_SESSION['is_admin'] = $user['is_admin'] ?? false;
+$_SESSION['is_rider'] = $user['is_rider'] ?? false;
+$_SESSION['user_status'] = $user_status;
 
-// Remove password from response
+// Remove sensitive data from response
 unset($user['password_hash']);
 
 // Send response
