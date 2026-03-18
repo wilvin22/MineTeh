@@ -6,7 +6,7 @@ ob_start();
 
 // Disable error display (errors should be logged, not displayed)
 ini_set('display_errors', '0');
-error_reporting(E_ALL);
+error_reporting(0);
 
 // CORS headers for mobile app access
 header('Access-Control-Allow-Origin: *'); // Allow all origins for testing, restrict in production
