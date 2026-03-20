@@ -78,19 +78,24 @@ if (isset($_POST['create-account'])) {
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
             
             $result = $supabase->insert('accounts', [
-                'username' => $username,
-                'first_name' => $first_name,
-                'last_name' => $last_name,
-                'email' => $email,
+                'username'      => $username,
+                'first_name'    => $first_name,
+                'last_name'     => $last_name,
+                'email'         => $email,
                 'password_hash' => $hashed_password,
-                'is_admin' => false
+                'is_admin'      => false
             ]);
-            
-            if ($result && !empty($result[0])) {
+
+            if (!empty($result)) {
                 header("Location: login.php?signup=success");
                 exit;
             } else {
-                $error_message = "Error creating account. Please try again.";
+                $last = $supabase->getLastError();
+                if ($last) {
+                    $error_message = "Account creation failed: HTTP " . $last['http_code'] . " — " . htmlspecialchars($last['response']);
+                } else {
+                    $error_message = "Account creation failed: database rejected the insert. Please run fix_accounts_rls.sql in Supabase.";
+                }
             }
         }
     } else {
@@ -108,11 +113,23 @@ if (isset($_POST['log-in'])) {
     } else {
         try {
             // Try to find user by email or username
-            $user = $supabase->customQuery('accounts', '*', 'or=(email.eq.' . urlencode($login_input) . ',username.eq.' . urlencode($login_input) . ')&limit=1');
+            $user = $supabase->customQuery('accounts', '*',
+                'or=(email.eq.' . rawurlencode($login_input) . ',username.eq.' . rawurlencode($login_input) . ')&limit=1');
+
+            // Fallback: try direct selects if or() query returns empty
+            if (empty($user)) {
+                $user = $supabase->select('accounts', '*', ['email' => $login_input]);
+                if (empty($user)) {
+                    $user = $supabase->select('accounts', '*', ['username' => $login_input]);
+                }
+            }
+
+            // Normalize to single user array
+            if (!empty($user) && isset($user[0])) {
+                $user = $user[0];
+            }
 
             if (!empty($user)) {
-                $user = $user[0];
-
                 if (password_verify($password, $user['password_hash'])) {
                     // Check user status
                     $user_status = isset($user['user_status']) ? $user['user_status'] : 'active';
@@ -137,14 +154,11 @@ if (isset($_POST['log-in'])) {
                         $_SESSION['user_id'] = $user['account_id'];
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? false;
-                        $_SESSION['is_rider'] = $user['is_rider'] ?? false;
                         $_SESSION['user_status'] = $user_status;
                         
-                        // redirect based on role
-                        if ($user['is_admin']) {
-                            header("Location: admin-dashboard.php");
-                        } elseif ($user['is_rider']) {
-                            header("Location: rider/dashboard.php");
+                        // redirect based on role - but only if not already logged in as admin
+                        if ($user['is_admin'] && !isset($_SESSION['admin_is_admin'])) {
+                            header("Location: admin/index.php");
                         } else {
                             header("Location: home/homepage.php");
                         }
@@ -154,14 +168,11 @@ if (isset($_POST['log-in'])) {
                         $_SESSION['user_id'] = $user['account_id'];
                         $_SESSION['username'] = $user['username'];
                         $_SESSION['is_admin'] = $user['is_admin'] ?? false;
-                        $_SESSION['is_rider'] = $user['is_rider'] ?? false;
                         $_SESSION['user_status'] = $user_status;
                         
-                        // redirect based on role
-                        if ($user['is_admin']) {
-                            header("Location: admin-dashboard.php");
-                        } elseif ($user['is_rider']) {
-                            header("Location: rider/dashboard.php");
+                        // redirect based on role - but only if not already logged in as admin
+                        if ($user['is_admin'] && !isset($_SESSION['admin_is_admin'])) {
+                            header("Location: admin/index.php");
                         } else {
                             header("Location: home/homepage.php");
                         }
@@ -183,6 +194,9 @@ if (isset($_POST['log-in'])) {
 // Check for success message
 if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
     $success_message = "Account created successfully! Please log in.";
+}
+if (isset($_GET['reset']) && $_GET['reset'] === 'success') {
+    $success_message = "Password reset successfully! Please log in with your new password.";
 }
 ?>
 
@@ -469,38 +483,6 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
             margin-right: 8px;
             margin-bottom: 0;
             cursor: pointer;
-        }
-        
-        .terms-agreement {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 16px;
-            font-size: 12px;
-            color: #555;
-        }
-        
-        .terms-agreement input[type="checkbox"] {
-            width: auto;
-            margin-right: 10px;
-            margin-top: 2px;
-            margin-bottom: 0;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        
-        .terms-agreement label {
-            margin: 0;
-            font-weight: normal;
-            cursor: pointer;
-        }
-        
-        .terms-agreement a {
-            color: #945a9b;
-            text-decoration: none;
-        }
-        
-        .terms-agreement a:hover {
-            text-decoration: underline;
         }
         
         .password-strength {
@@ -879,11 +861,6 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
 
                     <!-- FULL WIDTH ACTIONS -->
                     <div class="form-actions">
-                        <div class="terms-agreement">
-                            <input type="checkbox" id="terms-checkbox" name="terms-checkbox" required>
-                            <label for="terms-checkbox">I agree to the <a href="#" onclick="alert('Terms & Conditions coming soon!'); return false;">Terms & Conditions</a> and <a href="#" onclick="alert('Privacy Policy coming soon!'); return false;">Privacy Policy</a></label>
-                        </div>
-
                         <button type="submit" name="create-account" id="create-account">Create Account</button>
                         <button type="button" id="back-to-login">Back to Login</button>
                     </div>
@@ -893,34 +870,6 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
     </div>
 
     <script>
-        console.log('=== LOGIN PAGE DEBUG ===');
-        console.log('Login form exists:', document.getElementById('login-form') !== null);
-        console.log('Signup form exists:', document.getElementById('signup-form') !== null);
-        
-        // TEMPORARILY DISABLE ALL FORM VALIDATION - JUST LET FORMS SUBMIT
-        const loginForm = document.getElementById('login-form');
-        if (loginForm) {
-            console.log('Login form found, adding listener');
-            loginForm.addEventListener('submit', function(e) {
-                console.log('LOGIN FORM SUBMITTING - NOT PREVENTING');
-                // Don't prevent, just let it submit
-            });
-        } else {
-            console.error('Login form NOT found!');
-        }
-        
-        const signupForm = document.getElementById('signup-form');
-        if (signupForm) {
-            console.log('Signup form found, adding listener');
-            signupForm.addEventListener('submit', function(e) {
-                console.log('SIGNUP FORM SUBMITTING - NOT PREVENTING');
-                // Don't prevent, just let it submit
-            });
-        } else {
-            console.log('Signup form not found (probably hidden)');
-        }
-        
-        // Toggle password visibility
         function togglePassword(inputId, button) {
             const input = document.getElementById(inputId);
             if (input.type === 'password') {
@@ -931,310 +880,112 @@ if (isset($_GET['signup']) && $_GET['signup'] === 'success') {
                 button.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
             }
         }
-        
-        // Show signup form if there was a signup error
-        <?php if (!empty($error_message) && isset($_POST['create-account'])): ?>
-        document.getElementById('signup-container').style.display = 'block';
-        document.getElementById('login-container').style.display = 'none';
-        document.getElementById('content').classList.add('wide');
-        <?php endif; ?>
-        
-        document.getElementById('sign-up').onclick = function(e) {
-            e.preventDefault();
-            console.log('Switching to signup form');
+
+        function showSignup() {
             document.getElementById('signup-container').style.display = 'block';
             document.getElementById('login-container').style.display = 'none';
             document.getElementById('content').classList.add('wide');
-            
-            // Re-check if signup form exists after showing it
-            const signupForm = document.getElementById('signup-form');
-            console.log('Signup form now exists:', signupForm !== null);
-        };
-        
-        document.getElementById('back-to-login').onclick = function() {
-            console.log('Switching back to login form');
+        }
+
+        function showLogin() {
             document.getElementById('login-container').style.display = 'block';
             document.getElementById('signup-container').style.display = 'none';
             document.getElementById('content').classList.remove('wide');
-        };
-        
-        // Form submission validation and loading state for signup
-        if (signupForm) {
-            signupForm.addEventListener('submit', function(e) {
-                console.log('Signup form submitting...');
-                
-                const termsCheckbox = document.getElementById('terms-checkbox');
-                if (!termsCheckbox.checked) {
-                    e.preventDefault();
-                    alert('Please agree to the Terms & Conditions and Privacy Policy');
-                    return false;
-                }
-                
-                const username = document.getElementById('username').value;
-                const firstName = document.getElementById('first-name').value;
-                const lastName = document.getElementById('last-name').value;
-                const email = document.getElementById('signup-email').value;
-                const password = document.getElementById('signup-password').value;
-                const confirmPassword = document.getElementById('confirm-password').value;
-                
-                let isValid = true;
-                let errors = [];
-                
-                // Validate all fields
-                if (username.length < 6) {
-                    errors.push('Username must be at least 6 characters');
-                    showError('username', 'username-error', 'Username must be at least 6 characters');
-                    isValid = false;
-                } else if (!/\d/.test(username)) {
-                    errors.push('Username must contain at least one number');
-                    showError('username', 'username-error', 'Username must contain at least one number');
-                    isValid = false;
-                }
-                
-                if (firstName.length < 2) {
-                    errors.push('First name must be at least 2 characters');
-                    showError('first-name', 'firstname-error', 'First name must be at least 2 characters');
-                    isValid = false;
-                } else if (/\d/.test(firstName)) {
-                    errors.push('First name cannot contain numbers');
-                    showError('first-name', 'firstname-error', 'First name cannot contain numbers');
-                    isValid = false;
-                }
-                
-                if (lastName.length < 2) {
-                    errors.push('Last name must be at least 2 characters');
-                    showError('last-name', 'lastname-error', 'Last name must be at least 2 characters');
-                    isValid = false;
-                } else if (/\d/.test(lastName)) {
-                    errors.push('Last name cannot contain numbers');
-                    showError('last-name', 'lastname-error', 'Last name cannot contain numbers');
-                    isValid = false;
-                }
-                
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                    errors.push('Please enter a valid email address');
-                    showError('signup-email', 'email-error', 'Please enter a valid email address');
-                    isValid = false;
-                }
-                
-                if (password.length < 6 || password.length > 20) {
-                    errors.push('Password must be 6-20 characters');
-                    showError('signup-password', 'password-error', 'Password must be 6-20 characters');
-                    isValid = false;
-                } else if (!/[A-Z]/.test(password)) {
-                    errors.push('Password must contain at least one uppercase letter');
-                    showError('signup-password', 'password-error', 'Password must contain at least one uppercase letter');
-                    isValid = false;
-                } else if (!/\d/.test(password)) {
-                    errors.push('Password must contain at least one number');
-                    showError('signup-password', 'password-error', 'Password must contain at least one number');
-                    isValid = false;
-                } else if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-                    errors.push('Password must contain at least one special character');
-                    showError('signup-password', 'password-error', 'Password must contain at least one special character');
-                    isValid = false;
-                }
-                
-                if (password !== confirmPassword) {
-                    errors.push('Passwords do not match');
-                    showError('confirm-password', 'confirm-password-error', 'Passwords do not match');
-                    isValid = false;
-                }
-                
-                if (!isValid) {
-                    console.log('Validation failed:', errors);
-                    e.preventDefault();
-                    return false;
-                }
-                
-                console.log('Validation passed, submitting form...');
-                // If validation passes, show loading state
-                const btn = document.getElementById('create-account');
-                btn.disabled = true;
-                btn.innerHTML = 'Creating Account...<span class="spinner"></span>';
-                // Let form submit naturally
-                return true;
-            });
         }
-        
-        // Real-time validation functions
+
+        document.getElementById('sign-up').onclick = function(e) { e.preventDefault(); showSignup(); };
+        document.getElementById('back-to-login').onclick = function() { showLogin(); };
+
+        // Show signup if PHP returned an error on signup POST
+        <?php if (!empty($error_message) && isset($_POST['create-account'])): ?>
+        showSignup();
+        <?php endif; ?>
+
+        // Real-time field validation helpers
         function showError(inputId, errorId, message) {
             const input = document.getElementById(inputId);
             const error = document.getElementById(errorId);
-            input.classList.add('invalid');
-            input.classList.remove('valid');
-            error.textContent = '✗ ' + message;
-            error.classList.add('show');
-            return false;
+            if (input)  { input.classList.add('invalid'); input.classList.remove('valid'); }
+            if (error)  { error.textContent = '✗ ' + message; error.classList.add('show'); }
         }
-        
         function showSuccess(inputId, errorId) {
             const input = document.getElementById(inputId);
             const error = document.getElementById(errorId);
-            input.classList.add('valid');
-            input.classList.remove('invalid');
-            error.classList.remove('show');
-            return true;
+            if (input)  { input.classList.add('valid'); input.classList.remove('invalid'); }
+            if (error)  { error.classList.remove('show'); }
         }
-        
         function clearValidation(inputId, errorId) {
             const input = document.getElementById(inputId);
             const error = document.getElementById(errorId);
-            input.classList.remove('valid', 'invalid');
-            error.classList.remove('show');
+            if (input)  { input.classList.remove('valid', 'invalid'); }
+            if (error)  { error.classList.remove('show'); }
         }
-        
-        // Username validation
-        document.getElementById('username').addEventListener('input', function() {
-            const value = this.value;
-            if (value.length === 0) {
-                clearValidation('username', 'username-error');
-            } else if (value.length < 6) {
-                showError('username', 'username-error', 'Username must be at least 6 characters (currently ' + value.length + ')');
-            } else if (!/\d/.test(value)) {
-                showError('username', 'username-error', 'Username must contain at least one number');
-            } else {
-                showSuccess('username', 'username-error');
-            }
-        });
-        
-        // First name validation
-        document.getElementById('first-name').addEventListener('input', function() {
-            const value = this.value;
-            if (value.length === 0) {
-                clearValidation('first-name', 'firstname-error');
-            } else if (value.length < 2) {
-                showError('first-name', 'firstname-error', 'First name must be at least 2 characters');
-            } else if (/\d/.test(value)) {
-                showError('first-name', 'firstname-error', 'First name cannot contain numbers');
-            } else {
-                showSuccess('first-name', 'firstname-error');
-            }
-        });
-        
-        // Last name validation
-        document.getElementById('last-name').addEventListener('input', function() {
-            const value = this.value;
-            if (value.length === 0) {
-                clearValidation('last-name', 'lastname-error');
-            } else if (value.length < 2) {
-                showError('last-name', 'lastname-error', 'Last name must be at least 2 characters');
-            } else if (/\d/.test(value)) {
-                showError('last-name', 'lastname-error', 'Last name cannot contain numbers');
-            } else {
-                showSuccess('last-name', 'lastname-error');
-            }
-        });
-        
-        // Email validation
-        document.getElementById('signup-email').addEventListener('input', function() {
-            const value = this.value;
-            if (value.length === 0) {
-                clearValidation('signup-email', 'email-error');
-            } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-                showError('signup-email', 'email-error', 'Please enter a valid email address (e.g., user@example.com)');
-            } else {
-                showSuccess('signup-email', 'email-error');
-            }
-        });
-        
-        // Confirm password validation
-        document.getElementById('confirm-password').addEventListener('input', function() {
-            const password = document.getElementById('signup-password').value;
-            const confirmPassword = this.value;
-            
-            if (confirmPassword.length === 0) {
-                clearValidation('confirm-password', 'confirm-password-error');
-            } else if (password !== confirmPassword) {
-                showError('confirm-password', 'confirm-password-error', 'Passwords do not match');
-            } else {
-                showSuccess('confirm-password', 'confirm-password-error');
-            }
-        });
-        
-        // Also validate confirm password when main password changes
+
+        // Password strength checker
         document.getElementById('signup-password').addEventListener('input', function() {
-            const confirmPassword = document.getElementById('confirm-password').value;
-            if (confirmPassword.length > 0) {
-                if (this.value !== confirmPassword) {
-                    showError('confirm-password', 'confirm-password-error', 'Passwords do not match');
-                } else {
-                    showSuccess('confirm-password', 'confirm-password-error');
-                }
-            }
-            
-            // Password strength and requirements validation
             const value = this.value;
             const strengthBar = document.getElementById('strength-bar');
-            const reqLength = document.getElementById('req-length');
+            const reqLength    = document.getElementById('req-length');
             const reqUppercase = document.getElementById('req-uppercase');
-            const reqNumber = document.getElementById('req-number');
-            const reqSpecial = document.getElementById('req-special');
-            
-            if (value.length === 0) {
-                strengthBar.className = 'password-strength-bar';
-                reqLength.className = '';
-                reqUppercase.className = '';
-                reqNumber.className = '';
-                reqSpecial.className = '';
-                reqLength.textContent = '✗ 6-20 characters';
-                reqUppercase.textContent = '✗ 1 uppercase letter';
-                reqNumber.textContent = '✗ 1 number';
-                reqSpecial.textContent = '✗ 1 special character (!@#$%^&*)';
-                return;
-            }
-            
+            const reqNumber    = document.getElementById('req-number');
+            const reqSpecial   = document.getElementById('req-special');
+            if (!strengthBar) return;
+
             let strength = 0;
-            
-            // Check length
-            if (value.length >= 6 && value.length <= 20) {
-                reqLength.textContent = '✓ 6-20 characters';
-                reqLength.className = 'met';
-                strength++;
-            } else {
-                reqLength.textContent = '✗ 6-20 characters';
-                reqLength.className = 'unmet';
+            const checks = [
+                [value.length >= 6 && value.length <= 20, reqLength,    '6-20 characters'],
+                [/[A-Z]/.test(value),                      reqUppercase, '1 uppercase letter'],
+                [/\d/.test(value),                         reqNumber,    '1 number'],
+                [/[!@#$%^&*(),.?":{}|<>]/.test(value),    reqSpecial,   '1 special character (!@#$%^&*)'],
+            ];
+            checks.forEach(([met, el, label]) => {
+                if (!el) return;
+                el.textContent = (met ? '✓ ' : '✗ ') + label;
+                el.className   = value.length === 0 ? '' : (met ? 'met' : 'unmet');
+                if (met) strength++;
+            });
+            strengthBar.className = 'password-strength-bar' + (value.length === 0 ? '' : strength <= 2 ? ' weak' : strength === 3 ? ' medium' : ' strong');
+
+            // Re-check confirm
+            const confirm = document.getElementById('confirm-password');
+            if (confirm && confirm.value.length > 0) {
+                if (this.value !== confirm.value) showError('confirm-password', 'confirm-password-error', 'Passwords do not match');
+                else showSuccess('confirm-password', 'confirm-password-error');
             }
-            
-            // Check uppercase
-            if (/[A-Z]/.test(value)) {
-                reqUppercase.textContent = '✓ 1 uppercase letter';
-                reqUppercase.className = 'met';
-                strength++;
-            } else {
-                reqUppercase.textContent = '✗ 1 uppercase letter';
-                reqUppercase.className = 'unmet';
-            }
-            
-            // Check number
-            if (/\d/.test(value)) {
-                reqNumber.textContent = '✓ 1 number';
-                reqNumber.className = 'met';
-                strength++;
-            } else {
-                reqNumber.textContent = '✗ 1 number';
-                reqNumber.className = 'unmet';
-            }
-            
-            // Check special character
-            if (/[!@#$%^&*(),.?":{}|<>]/.test(value)) {
-                reqSpecial.textContent = '✓ 1 special character (!@#$%^&*)';
-                reqSpecial.className = 'met';
-                strength++;
-            } else {
-                reqSpecial.textContent = '✗ 1 special character (!@#$%^&*)';
-                reqSpecial.className = 'unmet';
-            }
-            
-            // Update strength bar
-            strengthBar.className = 'password-strength-bar';
-            if (strength <= 2) {
-                strengthBar.classList.add('weak');
-            } else if (strength === 3) {
-                strengthBar.classList.add('medium');
-            } else if (strength === 4) {
-                strengthBar.classList.add('strong');
-            }
+        });
+
+        document.getElementById('confirm-password').addEventListener('input', function() {
+            const pw = document.getElementById('signup-password').value;
+            if (!this.value) clearValidation('confirm-password', 'confirm-password-error');
+            else if (pw !== this.value) showError('confirm-password', 'confirm-password-error', 'Passwords do not match');
+            else showSuccess('confirm-password', 'confirm-password-error');
+        });
+
+        document.getElementById('username').addEventListener('input', function() {
+            if (!this.value) clearValidation('username', 'username-error');
+            else if (this.value.length < 6) showError('username', 'username-error', 'At least 6 characters (' + this.value.length + ' so far)');
+            else if (!/\d/.test(this.value)) showError('username', 'username-error', 'Must contain at least one number');
+            else showSuccess('username', 'username-error');
+        });
+
+        document.getElementById('first-name').addEventListener('input', function() {
+            if (!this.value) clearValidation('first-name', 'firstname-error');
+            else if (this.value.length < 2) showError('first-name', 'firstname-error', 'At least 2 characters');
+            else if (/\d/.test(this.value)) showError('first-name', 'firstname-error', 'Cannot contain numbers');
+            else showSuccess('first-name', 'firstname-error');
+        });
+
+        document.getElementById('last-name').addEventListener('input', function() {
+            if (!this.value) clearValidation('last-name', 'lastname-error');
+            else if (this.value.length < 2) showError('last-name', 'lastname-error', 'At least 2 characters');
+            else if (/\d/.test(this.value)) showError('last-name', 'lastname-error', 'Cannot contain numbers');
+            else showSuccess('last-name', 'lastname-error');
+        });
+
+        document.getElementById('signup-email').addEventListener('input', function() {
+            if (!this.value) clearValidation('signup-email', 'email-error');
+            else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.value)) showError('signup-email', 'email-error', 'Enter a valid email (e.g. user@example.com)');
+            else showSuccess('signup-email', 'email-error');
         });
     </script>
     </div>

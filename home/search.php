@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Block admin access to user pages
+require_once __DIR__ . '/../includes/block_admin_access.php';
+
 require_once '../database/supabase.php';
 
 // Check if user is logged in

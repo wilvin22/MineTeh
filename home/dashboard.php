@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Block admin access to user pages
+require_once __DIR__ . '/../includes/block_admin_access.php';
+
 include '../database/supabase.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -13,20 +17,19 @@ $user_id = $_SESSION['user_id'];
 $user = $supabase->select('accounts', '*', ['account_id' => $user_id], true);
 
 // === BUYING STATS ===
-// Get all purchases
-$purchases = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id);
-$total_purchases = is_array($purchases) ? count($purchases) : 0;
-$total_spent = 0;
-$pending_purchases = 0;
-
-if (!empty($purchases) && is_array($purchases)) {
-    foreach ($purchases as $purchase) {
-        $total_spent += isset($purchase['order_amount']) ? floatval($purchase['order_amount']) : 0;
-        if (isset($purchase['order_status']) && $purchase['order_status'] === 'pending') {
-            $pending_purchases++;
-        }
+// All conversations this user is part of
+$all_convs = $supabase->customQuery('conversations', '*', 'or=(user1_id.eq.' . $user_id . ',user2_id.eq.' . $user_id . ')');
+$total_purchases = 0;
+$total_sales     = 0;
+if (!empty($all_convs) && is_array($all_convs)) {
+    foreach ($all_convs as $c) {
+        $l = $supabase->select('listings', 'seller_id', ['id' => $c['listing_id']], true);
+        if (!$l) continue;
+        if ($l['seller_id'] == $user_id) $total_sales++;
+        else $total_purchases++;
     }
 }
+$pending_sales = 0;
 
 // Get active bids
 $active_bids = $supabase->select('bids', '*', ['user_id' => $user_id]);
@@ -66,20 +69,8 @@ if (!empty($listings) && is_array($listings)) {
     }
 }
 
-// Get sales
-$sales = $supabase->customQuery('orders', '*', 'seller_id=eq.' . $user_id);
-$total_sales = is_array($sales) ? count($sales) : 0;
+// Get sales (conversations as seller) — already computed above
 $total_revenue = 0;
-$pending_sales = 0;
-
-if (!empty($sales) && is_array($sales)) {
-    foreach ($sales as $sale) {
-        $total_revenue += isset($sale['order_amount']) ? floatval($sale['order_amount']) : 0;
-        if (isset($sale['order_status']) && $sale['order_status'] === 'pending') {
-            $pending_sales++;
-        }
-    }
-}
 
 // Get bids on user's listings
 $bids_received = 0;
@@ -91,9 +82,22 @@ if (!empty($listings) && is_array($listings)) {
 }
 
 // === RECENT ACTIVITY ===
-// Get recent orders (both buying and selling)
-$recent_purchases = $supabase->customQuery('orders', '*', 'buyer_id=eq.' . $user_id . '&order=created_at.desc&limit=3');
-$recent_sales = $supabase->customQuery('orders', '*', 'seller_id=eq.' . $user_id . '&order=created_at.desc&limit=3');
+// Get recent conversations, split by role
+$recent_all = $supabase->customQuery('conversations', '*', 'or=(user1_id.eq.' . $user_id . ',user2_id.eq.' . $user_id . ')&order=updated_at.desc&limit=10');
+$recent_purchases = [];
+$recent_sales     = [];
+if (!empty($recent_all) && is_array($recent_all)) {
+    foreach ($recent_all as $c) {
+        $l = $supabase->select('listings', 'seller_id,title', ['id' => $c['listing_id']], true);
+        if (!$l) continue;
+        $c['listing_title'] = $l['title'];
+        if ($l['seller_id'] == $user_id) {
+            if (count($recent_sales) < 3) $recent_sales[] = $c;
+        } else {
+            if (count($recent_purchases) < 3) $recent_purchases[] = $c;
+        }
+    }
+}
 
 // Get unread notifications
 $unread_notifications = $supabase->customQuery('notifications', 'id', 'user_id=eq.' . $user_id . '&is_read=eq.false&type=neq.new_message');
@@ -427,18 +431,9 @@ if (!empty($user_convs) && is_array($user_convs)) {
             <div class="stats-grid">
                 <!-- Buying Stats -->
                 <div class="stat-card">
-                    <div class="stat-icon">🛍️</div>
+                    <div class="stat-icon">💬</div>
                     <div class="stat-value"><?php echo $total_purchases; ?></div>
-                    <div class="stat-label">Total Purchases</div>
-                    <?php if ($pending_purchases > 0): ?>
-                        <div class="stat-change neutral"><?php echo $pending_purchases; ?> pending</div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-icon">💰</div>
-                    <div class="stat-value">₱<?php echo number_format($total_spent, 0); ?></div>
-                    <div class="stat-label">Total Spent</div>
+                    <div class="stat-label">Inquiries Sent</div>
                 </div>
 
                 <div class="stat-card">
@@ -465,18 +460,15 @@ if (!empty($user_convs) && is_array($user_convs)) {
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">💵</div>
-                    <div class="stat-value">₱<?php echo number_format($total_revenue, 0); ?></div>
-                    <div class="stat-label">Total Revenue</div>
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-value"><?php echo $sold_listings; ?></div>
+                    <div class="stat-label">Listings Sold</div>
                 </div>
 
                 <div class="stat-card">
-                    <div class="stat-icon">✅</div>
+                    <div class="stat-icon">📩</div>
                     <div class="stat-value"><?php echo $total_sales; ?></div>
-                    <div class="stat-label">Total Sales</div>
-                    <?php if ($pending_sales > 0): ?>
-                        <div class="stat-change neutral"><?php echo $pending_sales; ?> pending</div>
-                    <?php endif; ?>
+                    <div class="stat-label">Inquiries Received</div>
                 </div>
 
                 <div class="stat-card">
@@ -501,52 +493,26 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         </div>
                     <?php else: ?>
                         <?php if (!empty($recent_purchases)): ?>
-                            <?php foreach ($recent_purchases as $purchase): ?>
-                                <?php 
-                                $listing = $supabase->select('listings', 'title', ['id' => $purchase['listing_id']], true);
-                                ?>
+                            <?php foreach ($recent_purchases as $conv): ?>
                                 <div class="activity-item">
-                                    <div class="activity-icon">🛍️</div>
+                                    <div class="activity-icon">💬</div>
                                     <div class="activity-content">
-                                        <div class="activity-title">Purchase Order</div>
-                                        <div class="activity-desc">
-                                            <?php echo htmlspecialchars($listing['title'] ?? 'Item'); ?> - 
-                                            <span class="badge badge-<?php echo $purchase['status'] === 'pending' ? 'warning' : 'success'; ?>">
-                                                <?php echo ucfirst($purchase['status']); ?>
-                                            </span>
-                                        </div>
-                                        <div class="activity-time">
-                                            <?php echo date('M d, Y g:i A', strtotime($purchase['created_at'])); ?>
-                                        </div>
-                                    </div>
-                                    <div style="font-weight: bold; color: #945a9b;">
-                                        ₱<?php echo number_format($purchase['order_amount'], 2); ?>
+                                        <div class="activity-title">Inquiry Sent</div>
+                                        <div class="activity-desc"><?php echo htmlspecialchars($conv['listing_title'] ?? 'Item'); ?></div>
+                                        <div class="activity-time"><?php echo date('M d, Y g:i A', strtotime($conv['created_at'])); ?></div>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
                         <?php endif; ?>
 
                         <?php if (!empty($recent_sales)): ?>
-                            <?php foreach ($recent_sales as $sale): ?>
-                                <?php 
-                                $listing = $supabase->select('listings', 'title', ['id' => $sale['listing_id']], true);
-                                ?>
+                            <?php foreach ($recent_sales as $conv): ?>
                                 <div class="activity-item">
-                                    <div class="activity-icon">💰</div>
+                                    <div class="activity-icon">📩</div>
                                     <div class="activity-content">
-                                        <div class="activity-title">Sale Order</div>
-                                        <div class="activity-desc">
-                                            <?php echo htmlspecialchars($listing['title'] ?? 'Item'); ?> - 
-                                            <span class="badge badge-<?php echo $sale['status'] === 'pending' ? 'warning' : 'success'; ?>">
-                                                <?php echo ucfirst($sale['status']); ?>
-                                            </span>
-                                        </div>
-                                        <div class="activity-time">
-                                            <?php echo date('M d, Y g:i A', strtotime($sale['created_at'])); ?>
-                                        </div>
-                                    </div>
-                                    <div style="font-weight: bold; color: #28a745;">
-                                        +₱<?php echo number_format($sale['order_amount'], 2); ?>
+                                        <div class="activity-title">Inquiry Received</div>
+                                        <div class="activity-desc"><?php echo htmlspecialchars($conv['listing_title'] ?? 'Item'); ?></div>
+                                        <div class="activity-time"><?php echo date('M d, Y g:i A', strtotime($conv['created_at'])); ?></div>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -573,7 +539,7 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         <?php endif; ?>
 
                         <?php if ($unread_messages > 0): ?>
-                            <a href="messages.php" class="activity-item" style="text-decoration: none; color: inherit;">
+                            <a href="inbox.php" class="activity-item" style="text-decoration: none; color: inherit;">
                                 <div class="activity-icon">💬</div>
                                 <div class="activity-content">
                                     <div class="activity-title">Unread Messages</div>
@@ -583,7 +549,7 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         <?php endif; ?>
 
                         <?php if ($outbid_count > 0): ?>
-                            <a href="bids.php" class="activity-item" style="text-decoration: none; color: inherit;">
+                            <a href="buying.php?tab=bids" class="activity-item" style="text-decoration: none; color: inherit;">
                                 <div class="activity-icon">⚠️</div>
                                 <div class="activity-content">
                                     <div class="activity-title">Outbid Alert</div>
@@ -593,11 +559,11 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         <?php endif; ?>
 
                         <?php if ($pending_sales > 0): ?>
-                            <a href="your-orders.php?view=seller" class="activity-item" style="text-decoration: none; color: inherit;">
-                                <div class="activity-icon">📦</div>
+                            <a href="inbox.php?view=seller" class="activity-item" style="text-decoration: none; color: inherit;">
+                                <div class="activity-icon">📩</div>
                                 <div class="activity-content">
-                                    <div class="activity-title">Pending Sales</div>
-                                    <div class="activity-desc"><?php echo $pending_sales; ?> order<?php echo $pending_sales > 1 ? 's' : ''; ?> waiting to be processed</div>
+                                    <div class="activity-title">New Inquiries</div>
+                                    <div class="activity-desc"><?php echo $pending_sales; ?> new inquiry on your listings</div>
                                 </div>
                             </a>
                         <?php endif; ?>
@@ -626,22 +592,22 @@ if (!empty($user_convs) && is_array($user_convs)) {
                             Browse Marketplace
                         </a>
 
-                        <a href="your-listings.php" class="quick-action">
+                        <a href="selling.php?tab=manage" class="quick-action">
                             <span class="quick-action-icon">📋</span>
                             Manage Listings
                         </a>
 
-                        <a href="your-orders.php" class="quick-action">
-                            <span class="quick-action-icon">📦</span>
-                            View Orders
+                        <a href="inbox.php" class="quick-action">
+                            <span class="quick-action-icon">💬</span>
+                            My Conversations
                         </a>
 
-                        <a href="bids.php" class="quick-action">
+                        <a href="buying.php?tab=bids" class="quick-action">
                             <span class="quick-action-icon">🔨</span>
                             My Bids
                         </a>
 
-                        <a href="saved-items.php" class="quick-action">
+                        <a href="buying.php?tab=saved" class="quick-action">
                             <span class="quick-action-icon">❤️</span>
                             Saved Items
                         </a>
@@ -681,9 +647,9 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         </div>
 
                         <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Average Sale Price</div>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Inquiries Received</div>
                             <div style="font-size: 24px; font-weight: bold; color: #945a9b;">
-                                ₱<?php echo $total_sales > 0 ? number_format($total_revenue / $total_sales, 2) : '0.00'; ?>
+                                <?php echo $total_sales; ?> conversations
                             </div>
                         </div>
                     </div>
@@ -697,7 +663,23 @@ if (!empty($user_convs) && is_array($user_convs)) {
                                 <span style="font-size: 14px; color: #666;">Bid Success Rate</span>
                                 <span style="font-weight: bold;">
                                     <?php 
-                                    $bid_success = $total_bids > 0 ? round(($total_purchases / $total_bids) * 100) : 0;
+                                    // Won = bids where user has highest bid on a closed/sold listing
+                                    $won_count = 0;
+                                    if (!empty($active_bids) && is_array($active_bids)) {
+                                        $checked = [];
+                                        foreach ($active_bids as $bid) {
+                                            if (in_array($bid['listing_id'], $checked)) continue;
+                                            $checked[] = $bid['listing_id'];
+                                            $bl = $supabase->select('listings', 'status,end_time', ['id' => $bid['listing_id']], true);
+                                            if (!$bl) continue;
+                                            $ended = in_array($bl['status'], ['sold','CLOSED']) || (!empty($bl['end_time']) && strtotime($bl['end_time']) < time());
+                                            if (!$ended) continue;
+                                            $top = $supabase->customQuery('bids', 'user_id', 'listing_id=eq.' . $bid['listing_id'] . '&order=bid_amount.desc&limit=1');
+                                            if (!empty($top) && $top[0]['user_id'] == $user_id) $won_count++;
+                                        }
+                                    }
+                                    $unique_auctions = count(array_unique(array_column($active_bids ?: [], 'listing_id')));
+                                    $bid_success = $unique_auctions > 0 ? round(($won_count / $unique_auctions) * 100) : 0;
                                     echo $bid_success; ?>%
                                 </span>
                             </div>
@@ -717,9 +699,9 @@ if (!empty($user_convs) && is_array($user_convs)) {
                         </div>
 
                         <div style="padding: 15px; background: #f8f9fa; border-radius: 8px;">
-                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Average Purchase Price</div>
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Inquiries Sent</div>
                             <div style="font-size: 24px; font-weight: bold; color: #945a9b;">
-                                ₱<?php echo $total_purchases > 0 ? number_format($total_spent / $total_purchases, 2) : '0.00'; ?>
+                                <?php echo $total_purchases; ?> conversations
                             </div>
                         </div>
                     </div>

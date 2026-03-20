@@ -1,16 +1,10 @@
 <?php
 session_start();
 
-// Destroy all session data
-$_SESSION = array();
-
-// Destroy the session cookie
-if (isset($_COOKIE[session_name()])) {
-    setcookie(session_name(), '', time()-3600, '/');
-}
-
-// Destroy the session
-session_destroy();
+// Only destroy admin session data, not user session
+unset($_SESSION['admin_user_id']);
+unset($_SESSION['admin_username']);
+unset($_SESSION['admin_is_admin']);
 
 // Redirect to admin login page
 header('Location: login.php?logout=success');

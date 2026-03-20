@@ -5,7 +5,8 @@ date_default_timezone_set('Asia/Manila');
 include '../config.php';
 include '../database/supabase.php';
 
-if (!isset($_SESSION['user_id']) || !isset($_SESSION['is_admin']) || !$_SESSION['is_admin']) {
+// Check if user is admin using admin-specific session variables
+if (!isset($_SESSION['admin_user_id']) || !isset($_SESSION['admin_is_admin']) || !$_SESSION['admin_is_admin']) {
     header("Location: login.php");
     exit;
 }
@@ -199,18 +200,13 @@ if (!empty($listings)) {
             <div class="logo">🛡️ Admin Panel</div>
             <a href="index.php" class="nav-item">📊 Dashboard</a>
             <a href="users.php" class="nav-item">👥 Users</a>
-            <a href="riders.php" class="nav-item">🏍️ Riders</a>
-            <a href="delivery-monitor.php" class="nav-item">📊 Delivery Monitor</a>
             <a href="listings.php" class="nav-item active">📦 Listings</a>
-            <a href="orders.php" class="nav-item">🛒 Orders</a>
-            <a href="categories.php" class="nav-item">🏷️ Categories</a>
-            <a href="../home/homepage.php" class="nav-item">🏠 View Site</a>
+            <a href="logout.php" class="nav-item" style="margin-top:20px;background:rgba(231,76,60,0.3);">🚪 Logout</a>
         </div>
 
         <div class="main-content">
             <div class="header">
                 <h1>Listings Management</h1>
-                <a href="logout.php" class="logout-btn">Logout</a>
             </div>
 
             <?php if (isset($success)): ?>

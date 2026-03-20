@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Block admin access to user pages
+require_once __DIR__ . '/../includes/block_admin_access.php';
+
 include "../database/supabase.php";
 
 if (!isset($_SESSION['user_id'])) {
@@ -17,9 +21,21 @@ $user_account = $supabase->select('accounts', '*', ['account_id' => $user_id], t
 // Get or create user profile
 $user_profile = $supabase->select('user_profiles', '*', ['user_id' => $user_id], true);
 if (!$user_profile) {
-    // Create default profile
-    $supabase->insert('user_profiles', ['user_id' => $user_id]);
+    // Create default profile, seeding from accounts if available
+    $supabase->insert('user_profiles', [
+        'user_id'    => $user_id,
+        'first_name' => $user_account['first_name'] ?? null,
+        'last_name'  => $user_account['last_name'] ?? null,
+    ]);
     $user_profile = $supabase->select('user_profiles', '*', ['user_id' => $user_id], true);
+} else {
+    // If user_profiles has empty name but accounts has it, use accounts as fallback display
+    if (empty($user_profile['first_name']) && !empty($user_account['first_name'])) {
+        $user_profile['first_name'] = $user_account['first_name'];
+    }
+    if (empty($user_profile['last_name']) && !empty($user_account['last_name'])) {
+        $user_profile['last_name'] = $user_account['last_name'];
+    }
 }
 
 // Get user addresses
@@ -37,6 +53,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
         
         $result = $supabase->update('user_profiles', $profile_data, ['user_id' => $user_id]);
+        // Also sync first_name/last_name to accounts table
+        $supabase->update('accounts', [
+            'first_name' => $profile_data['first_name'],
+            'last_name'  => $profile_data['last_name']
+        ], ['account_id' => $user_id]);
         if ($result) {
             $success_message = "Profile updated successfully!";
             $user_profile = $supabase->select('user_profiles', '*', ['user_id' => $user_id], true);
@@ -259,6 +280,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             color: #adb5bd;
         }
 
+        .input-edit-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .input-edit-wrap input {
+            padding-right: 42px;
+        }
+        .input-edit-wrap input[readonly] {
+            background: #f8f9fa;
+            color: #333;
+            cursor: default;
+        }
+        .input-edit-wrap input:not([readonly]) {
+            background: white;
+            border-color: #945a9b;
+            box-shadow: 0 0 0 3px rgba(148,90,155,0.1);
+        }
+        .edit-icon {
+            position: absolute;
+            right: 14px;
+            font-size: 16px;
+            cursor: pointer;
+            opacity: 0.4;
+            transition: opacity 0.2s, transform 0.2s;
+            user-select: none;
+        }
+        .edit-icon:hover { opacity: 1; transform: scale(1.2); }
+        .edit-icon.active { opacity: 1; }
+
         .checkbox-group {
             display: flex;
             align-items: center;
@@ -464,21 +515,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="form-section">
                         <h3 class="section-title">Personal Information</h3>
                         <div class="form-grid">
+                            <?php
+                            // Merge: accounts is primary source, user_profiles as fallback
+                            $fn  = $user_account['first_name'] ?? $user_profile['first_name'] ?? '';
+                            $ln  = $user_account['last_name']  ?? $user_profile['last_name']  ?? '';
+                            $ph  = $user_profile['phone'] ?? '';
+                            $dob = $user_profile['date_of_birth'] ?? '';
+                            ?>
                             <div class="form-group">
                                 <label>First Name</label>
-                                <input type="text" name="first_name" value="<?php echo htmlspecialchars($user_profile['first_name'] ?? ''); ?>" placeholder="Enter your first name">
+                                <div class="input-edit-wrap">
+                                    <input type="text" name="first_name" id="field_first_name"
+                                        value="<?php echo htmlspecialchars($fn); ?>"
+                                        placeholder="<?php echo htmlspecialchars($fn ?: 'First name'); ?>"
+                                        readonly>
+                                    <span class="edit-icon" onclick="enableField('field_first_name', this)">✏️</span>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Last Name</label>
-                                <input type="text" name="last_name" value="<?php echo htmlspecialchars($user_profile['last_name'] ?? ''); ?>" placeholder="Enter your last name">
+                                <div class="input-edit-wrap">
+                                    <input type="text" name="last_name" id="field_last_name"
+                                        value="<?php echo htmlspecialchars($ln); ?>"
+                                        placeholder="<?php echo htmlspecialchars($ln ?: 'Last name'); ?>"
+                                        readonly>
+                                    <span class="edit-icon" onclick="enableField('field_last_name', this)">✏️</span>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Phone Number</label>
-                                <input type="tel" name="phone" value="<?php echo htmlspecialchars($user_profile['phone'] ?? ''); ?>" placeholder="e.g., +63 912 345 6789">
+                                <div class="input-edit-wrap">
+                                    <input type="tel" name="phone" id="field_phone"
+                                        value="<?php echo htmlspecialchars($ph); ?>"
+                                        placeholder="<?php echo htmlspecialchars($ph ?: 'e.g., +63 912 345 6789'); ?>"
+                                        readonly>
+                                    <span class="edit-icon" onclick="enableField('field_phone', this)">✏️</span>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label>Date of Birth</label>
-                                <input type="date" name="date_of_birth" value="<?php echo $user_profile['date_of_birth'] ?? ''; ?>">
+                                <div class="input-edit-wrap">
+                                    <input type="date" name="date_of_birth" id="field_dob"
+                                        value="<?php echo htmlspecialchars($dob); ?>"
+                                        readonly>
+                                    <span class="edit-icon" onclick="enableField('field_dob', this)">✏️</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -662,6 +743,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         function toggleAddressForm() {
             const form = document.getElementById('add-address-form');
             form.classList.toggle('show');
+        }
+        
+        function enableField(fieldId, iconEl) {
+            const input = document.getElementById(fieldId);
+            input.removeAttribute('readonly');
+            input.focus();
+            // Move cursor to end
+            const val = input.value;
+            input.value = '';
+            input.value = val;
+            iconEl.classList.add('active');
+            iconEl.textContent = '✅';
+            iconEl.onclick = function() {
+                input.setAttribute('readonly', true);
+                iconEl.classList.remove('active');
+                iconEl.textContent = '✏️';
+                iconEl.onclick = function() { enableField(fieldId, iconEl); };
+            };
         }
         
         function confirmLogout() {

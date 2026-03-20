@@ -1,0 +1,136 @@
+═══════════════════════════════════════════════════════════════
+  FILES TO UPLOAD TO WEB HOSTING - MineTeh Admin/User Fix
+═══════════════════════════════════════════════════════════════
+
+IMPORTANT: Test locally first before uploading to production!
+
+═══════════════════════════════════════════════════════════════
+  PART 1: NEW FILES (Create these on your hosting)
+═══════════════════════════════════════════════════════════════
+
+1. includes/block_admin_access.php  ← NEW FILE (prevents admin from accessing user pages)
+
+═══════════════════════════════════════════════════════════════
+  PART 2: MODIFIED FILES (Replace existing files)
+═══════════════════════════════════════════════════════════════
+
+ROOT DIRECTORY:
+2. index.php
+3. login.php
+4. logout.php
+
+ADMIN FOLDER (admin/):
+5. admin/login.php
+6. admin/logout.php
+7. admin/index.php
+8. admin/dashboard.php
+9. admin/users.php
+10. admin/orders.php
+11. admin/listings.php
+12. admin/categories.php
+
+HOME FOLDER (home/):
+13. home/homepage.php
+14. home/dashboard.php
+15. home/cart.php
+16. home/bids.php
+17. home/messages.php
+18. home/notifications.php
+19. home/profile.php
+20. home/account-settings.php
+21. home/saved-items.php
+22. home/your-listings.php
+23. home/your-orders.php
+24. home/checkout.php
+25. home/create-listing.php
+26. home/listing-details.php
+27. home/order-confirmation.php
+28. home/search.php
+
+ACTIONS FOLDER (actions/):
+29. actions/check-session.php
+30. actions/v1/auth/login.php
+31. actions/v1/auth/register.php
+
+═══════════════════════════════════════════════════════════════
+  PART 3: FILES TO DELETE (Remove from your hosting)
+═══════════════════════════════════════════════════════════════
+
+ENTIRE FOLDER TO DELETE:
+- rider/ (delete the entire folder)
+
+ADMIN FILES TO DELETE:
+- admin/riders.php
+- admin/delivery-monitor.php
+- admin/delivery-monitor-simple.php
+- admin/test-api-path.html
+
+ACTIONS FILES TO DELETE:
+- actions/admin-rider-action.php
+- actions/rider-complete-delivery.php
+- actions/rider-update-status.php
+- actions/test-rider-creation.php
+- actions/get-available-accounts.php
+
+SERVICES FILES TO DELETE:
+- services/AutoDeliveryAssignment.php
+
+ROOT FILES TO DELETE:
+- test_rider_page.php
+- test_create_rider_direct.php
+- test_automated_delivery.php
+- test_admin_riders_simple.php
+- test_delivery_monitor.php
+- debug_delivery_monitor.php
+- debug_rider_system.php
+- check_rider_login.php
+
+DOCUMENTATION FILES TO DELETE:
+- AUTOMATED_DELIVERY_SYSTEM.md
+- RIDER_SYSTEM_SETUP.md
+- RIDER_REGISTRATION_GUIDE.md
+- RIDER_LOGIN_TEST.md
+- RIDER_SYSTEM_CHECKLIST.md
+- RIDER_SYSTEM_FIXED.md
+- RIDER_SYSTEM_FUNCTIONAL_TEST.md
+- add_rider_system_tables.sql
+
+═══════════════════════════════════════════════════════════════
+  PART 4: DATABASE CLEANUP (Run in Supabase SQL Editor)
+═══════════════════════════════════════════════════════════════
+
+Run the SQL commands in: remove_rider_tables.sql
+
+This will:
+- Drop rider-related tables (riders, deliveries, delivery_tracking, rider_earnings)
+- Remove is_rider column from accounts table
+
+═══════════════════════════════════════════════════════════════
+  TESTING CHECKLIST AFTER UPLOAD
+═══════════════════════════════════════════════════════════════
+
+1. Clear your browser cache and cookies
+2. Test user login - should go to home/homepage.php
+3. Test admin login - should go to admin/index.php
+4. Open two tabs:
+   - Tab 1: Login as user
+   - Tab 2: Login as admin
+5. Refresh both tabs - each should stay in their respective area
+6. As admin, verify you cannot access user pages
+7. As user, verify all features work (browse, cart, checkout, etc.)
+8. Test checkout - should work without delivery assignment errors
+9. Verify no "Riders" or "Delivery Monitor" links in admin panel
+
+═══════════════════════════════════════════════════════════════
+  WHAT WAS FIXED
+═══════════════════════════════════════════════════════════════
+
+✅ Admin and user sessions are now completely separate
+✅ Admin cannot access user pages (auto-redirects to admin panel)
+✅ User cannot access admin pages (existing protection)
+✅ "View Site" link removed from admin panel
+✅ All rider/delivery functionality completely removed
+✅ Checkout works without rider assignment
+✅ All navigation menus updated
+
+═══════════════════════════════════════════════════════════════

@@ -5,6 +5,12 @@
  */
 session_start();
 
+// Check if admin is logged in
+if (isset($_SESSION['admin_is_admin']) && $_SESSION['admin_is_admin'] === true) {
+    header("Location: admin/index.php");
+    exit;
+}
+
 // Check if user is logged in
 if (isset($_SESSION['user_id'])) {
     // User is logged in, redirect to homepage

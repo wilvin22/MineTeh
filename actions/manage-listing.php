@@ -37,11 +37,35 @@ $result = false;
 
 switch ($action) {
     case 'close':
-        // Close auction - set status to CLOSED
-        $result = $supabase->update('listings', 
-            ['status' => 'CLOSED'], 
-            ['id' => $listing_id]
-        );
+        // Close auction — find highest bidder, notify them, mark listing sold
+        $highest_bid_rows = $supabase->customQuery('bids', '*',
+            'listing_id=eq.' . $listing_id . '&order=bid_amount.desc&limit=1');
+        $winner_bid = !empty($highest_bid_rows) ? $highest_bid_rows[0] : null;
+
+        if ($winner_bid) {
+            include_once '../database/notifications_helper.php';
+            $notificationHelper = new NotificationsHelper();
+
+            // Notify winner
+            $notificationHelper->createNotification(
+                $winner_bid['user_id'],
+                'listing_sold',
+                'You won the auction!',
+                'You won "' . $listing['title'] . '" for ₱' . number_format($winner_bid['bid_amount'], 2),
+                'listing-details.php?id=' . $listing_id
+            );
+
+            // Notify seller
+            $winner_rows = $supabase->customQuery('accounts', 'username',
+                'account_id=eq.' . $winner_bid['user_id'] . '&limit=1');
+            $winner_name = !empty($winner_rows) ? $winner_rows[0]['username'] : 'A buyer';
+
+            $notificationHelper->notifyListingSold(
+                $user_id, $listing_id, $listing['title'], $winner_bid['bid_amount'], $winner_name
+            );
+        }
+
+        $result = $supabase->update('listings', ['status' => 'sold'], ['id' => $listing_id]);
         break;
         
     case 'disable':

@@ -25,7 +25,6 @@ class SupabaseClient {
         
         foreach ($filters as $key => $value) {
             if (is_array($value)) {
-                // Handle array values with IN operator - values need to be quoted for strings
                 $quotedValues = array_map(function($v) {
                     return '"' . str_replace('"', '""', $v) . '"';
                 }, $value);
@@ -41,7 +40,7 @@ class SupabaseClient {
         
         $response = $this->makeRequest('GET', $url);
         
-        if ($single && !empty($response)) {
+        if ($single && !empty($response) && is_array($response)) {
             return $response[0];
         }
         

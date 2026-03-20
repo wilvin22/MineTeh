@@ -74,7 +74,6 @@ $supabase->insert('user_sessions', $sessionData);
 $_SESSION['user_id'] = $user['account_id'];
 $_SESSION['username'] = $user['username'];
 $_SESSION['is_admin'] = $user['is_admin'] ?? false;
-$_SESSION['is_rider'] = $user['is_rider'] ?? false;
 $_SESSION['user_status'] = $user_status;
 
 // Remove sensitive data from response

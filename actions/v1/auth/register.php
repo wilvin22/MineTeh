@@ -112,7 +112,7 @@ if ($result === false || empty($result)) {
 }
 
 // Get the created user
-$newUser = $supabase->select('accounts', 'account_id,username,email,first_name,last_name,is_admin,is_rider', ['username' => $username]);
+$newUser = $supabase->select('accounts', 'account_id,username,email,first_name,last_name,is_admin', ['username' => $username]);
 
 if (empty($newUser)) {
     sendError('Account created but failed to retrieve details', 500);
@@ -137,7 +137,6 @@ $supabase->insert('user_sessions', $sessionData);
 $_SESSION['user_id'] = $newUser['account_id'];
 $_SESSION['username'] = $newUser['username'];
 $_SESSION['is_admin'] = $newUser['is_admin'] ?? false;
-$_SESSION['is_rider'] = $newUser['is_rider'] ?? false;
 
 // Send response
 sendResponse(true, [

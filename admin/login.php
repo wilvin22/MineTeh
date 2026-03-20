@@ -22,9 +22,12 @@ if (isset($_POST['login'])) {
                 $reason = isset($user['status_reason']) ? $user['status_reason'] : 'No reason provided';
                 $error = "Your account has been banned. Reason: " . htmlspecialchars($reason);
             } else {
-                $_SESSION['user_id'] = $user['account_id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['is_admin'] = true;
+                // Use separate session prefix for admin to avoid conflicts with user sessions
+                $_SESSION['admin_user_id'] = $user['account_id'];
+                $_SESSION['admin_username'] = $user['username'];
+                $_SESSION['admin_is_admin'] = true;
+                
+                // Don't clear user session - allow both to coexist
                 
                 header("Location: index.php");
                 exit;

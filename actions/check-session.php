@@ -9,7 +9,6 @@ $response = [
     'user_id' => $_SESSION['user_id'] ?? null,
     'username' => $_SESSION['username'] ?? null,
     'is_admin' => $_SESSION['is_admin'] ?? false,
-    'is_rider' => $_SESSION['is_rider'] ?? false,
     'user_status' => $_SESSION['user_status'] ?? null
 ];
 
@@ -22,8 +21,7 @@ if ($response['logged_in']) {
                 'email' => $user['email'],
                 'first_name' => $user['first_name'],
                 'last_name' => $user['last_name'],
-                'is_admin' => $user['is_admin'],
-                'is_rider' => $user['is_rider'] ?? false
+                'is_admin' => $user['is_admin']
             ];
         }
     } catch (Exception $e) {

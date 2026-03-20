@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Block admin access to user pages
+require_once __DIR__ . '/../includes/block_admin_access.php';
+
 include '../database/supabase.php';
 
 if (!isset($_SESSION['user_id'])) {
@@ -17,7 +21,7 @@ $cart_items = $supabase->select('cart', '*', ['user_id' => $user_id]);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Your Cart - MineTeh</title>
+    <title>Saved Items - MineTeh</title>
     <link rel="stylesheet" href="../sidebar/sidebar.css">
     <style>
         body {
@@ -258,8 +262,8 @@ $cart_items = $supabase->select('cart', '*', ['user_id' => $user_id]);
     
     <div id="main-content" class="main-wrapper">
         <div class="page-header">
-            <div class="page-title">🛒 Your Cart</div>
-            <div class="page-subtitle">Review items before checkout</div>
+            <div class="page-title">🛒 Saved Items</div>
+            <div class="page-subtitle">Items you're interested in</div>
         </div>
 
         <?php if (empty($cart_items)): ?>
@@ -306,8 +310,8 @@ $cart_items = $supabase->select('cart', '*', ['user_id' => $user_id]);
                                     <div class='item-seller'>Sold by: " . htmlspecialchars($seller['first_name']) . "</div>
                                 </div>
                                 <div class='item-actions'>
-                                    <a href='checkout.php?listing_id=$listing_id' class='btn-checkout-item'>
-                                        Checkout
+                                    <a href='messages.php?seller_id=" . $listing['seller_id'] . "&listing_id=$listing_id' class='btn-checkout-item'>
+                                        Contact Seller
                                     </a>
                                     <button onclick='removeFromCart($listing_id)' class='btn-remove'>
                                         Remove

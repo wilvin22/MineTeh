@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Block admin access to user pages
+require_once __DIR__ . '/../includes/block_admin_access.php';
+
 date_default_timezone_set('Asia/Manila');
 
 // Prevent browser caching of this page
@@ -90,8 +94,49 @@ if (!is_array($listing) || !isset($listing['title'])) {
 }
 
 // Get seller information
-$seller = $supabase->select('accounts', 'username,first_name,last_name', ['account_id' => $listing['seller_id']]);
-$seller = !empty($seller) && is_array($seller) ? $seller[0] : ['username' => 'Unknown', 'first_name' => 'Unknown', 'last_name' => 'Seller'];
+$seller = $supabase->select('accounts', 'username,first_name,last_name,created_at', ['account_id' => $listing['seller_id']]);
+$seller = !empty($seller) && is_array($seller) ? $seller[0] : ['username' => 'Unknown', 'first_name' => 'Unknown', 'last_name' => 'Seller', 'created_at' => null];
+
+// Get seller location from user_profiles
+$seller_profile = $supabase->select('user_profiles', 'location', ['user_id' => $listing['seller_id']], true);
+$seller['location'] = !empty($seller_profile['location']) ? $seller_profile['location'] : null;
+
+// Get seller address (city + province only) from user_addresses
+$seller_address = $supabase->select('user_addresses', 'city,state_province', ['user_id' => $listing['seller_id'], 'is_default' => true], true);
+if (empty($seller_address)) {
+    // fallback: any address
+    $seller_addr_any = $supabase->customQuery('user_addresses', 'city,state_province', 'user_id=eq.' . $listing['seller_id'] . '&limit=1');
+    $seller_address = !empty($seller_addr_any) ? $seller_addr_any[0] : null;
+}
+$seller_location_display = null;
+if (!empty($seller_address)) {
+    $parts = array_filter([$seller_address['city'] ?? null, $seller_address['state_province'] ?? null]);
+    $seller_location_display = implode(', ', $parts) ?: null;
+}
+
+// Seller profile modal data
+$seller_all_listings = $supabase->customQuery('listings', 'id,status', 'seller_id=eq.' . $listing['seller_id']);
+$seller_total_listings = is_array($seller_all_listings) ? count($seller_all_listings) : 0;
+$seller_sold_count = is_array($seller_all_listings) ? count(array_filter($seller_all_listings, fn($l) => $l['status'] === 'sold')) : 0;
+
+$seller_reviews = $supabase->customQuery('reviews', 'rating', 'seller_id=eq.' . $listing['seller_id']);
+$seller_avg_rating = 0;
+$seller_review_count = 0;
+if (!empty($seller_reviews) && is_array($seller_reviews)) {
+    $seller_review_count = count($seller_reviews);
+    $seller_avg_rating = round(array_sum(array_column($seller_reviews, 'rating')) / $seller_review_count, 1);
+}
+
+// Get seller's active listings (up to 4 for preview)
+$seller_active_listings = $supabase->customQuery('listings', '*', 'seller_id=eq.' . $listing['seller_id'] . '&status=eq.active&order=created_at.desc&limit=4');
+if (!empty($seller_active_listings)) {
+    foreach ($seller_active_listings as &$sl) {
+        $sl_imgs = $supabase->select('listing_images', 'image_path', ['listing_id' => $sl['id']]);
+        $sl['thumb'] = !empty($sl_imgs) ? getImageUrl($sl_imgs[0]['image_path']) : '';
+    }
+    unset($sl);
+}
+$seller_member_since = !empty($seller['created_at']) ? date('F Y', strtotime($seller['created_at'])) : 'Unknown';
 
 // Get all images for this listing
 $images = $supabase->select('listing_images', '*', ['listing_id' => $listing_id]);
@@ -182,6 +227,7 @@ if (isset($_SESSION['user_id'])) {
             position: relative;
             background: #f0f0f0;
             height: 500px;
+            overflow: hidden;
         }
 
         .main-image {
@@ -189,6 +235,84 @@ if (isset($_SESSION['user_id'])) {
             height: 100%;
             object-fit: contain;
             background: #000;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Carousel Navigation Arrows */
+        .carousel-arrow {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .carousel-arrow:hover {
+            background: rgba(148, 90, 155, 0.9);
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .carousel-arrow.prev {
+            left: 15px;
+        }
+
+        .carousel-arrow.next {
+            right: 15px;
+        }
+
+        .carousel-arrow:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* Image Counter */
+        .image-counter {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            z-index: 10;
+        }
+
+        /* Fullscreen Button */
+        .fullscreen-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 10;
+        }
+
+        .fullscreen-btn:hover {
+            background: rgba(148, 90, 155, 0.9);
+            transform: scale(1.1);
         }
 
         .image-thumbnails {
@@ -197,22 +321,109 @@ if (isset($_SESSION['user_id'])) {
             padding: 15px;
             overflow-x: auto;
             background: #fafafa;
+            scrollbar-width: thin;
+            scrollbar-color: #945a9b #f0f0f0;
+        }
+
+        .image-thumbnails::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .image-thumbnails::-webkit-scrollbar-track {
+            background: #f0f0f0;
+        }
+
+        .image-thumbnails::-webkit-scrollbar-thumb {
+            background: #945a9b;
+            border-radius: 4px;
         }
 
         .thumbnail {
             width: 80px;
             height: 80px;
+            min-width: 80px;
             object-fit: cover;
             border-radius: 8px;
             cursor: pointer;
-            border: 2px solid transparent;
+            border: 3px solid transparent;
             transition: all 0.2s ease;
+            position: relative;
         }
 
-        .thumbnail:hover,
+        .thumbnail:hover {
+            border-color: #945a9b;
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(148, 90, 155, 0.3);
+        }
+
         .thumbnail.active {
             border-color: #945a9b;
             transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(148, 90, 155, 0.5);
+        }
+
+        .thumbnail.active::after {
+            content: '✓';
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #945a9b;
+            color: white;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* Fullscreen Modal */
+        .fullscreen-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .fullscreen-modal.active {
+            display: flex;
+        }
+
+        .fullscreen-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+        }
+
+        .fullscreen-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .fullscreen-close:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: rotate(90deg);
         }
 
         .listing-info {
@@ -441,6 +652,174 @@ if (isset($_SESSION['user_id'])) {
                 box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
             }
         }
+
+        /* Seller Profile Modal */
+        .seller-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.55);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+        }
+        .seller-modal-overlay.active { display: flex; }
+
+        .seller-modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalSlideIn 0.25s ease;
+        }
+
+        @keyframes modalSlideIn {
+            from { transform: translateY(30px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
+        .seller-modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 24px;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            position: relative;
+        }
+
+        .seller-modal-close {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .seller-modal-close:hover { background: rgba(255,255,255,0.35); }
+
+        .seller-modal-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: bold;
+            flex-shrink: 0;
+            border: 3px solid rgba(255,255,255,0.4);
+        }
+
+        .seller-modal-name { font-size: 20px; font-weight: bold; color: white; }
+        .seller-modal-username { font-size: 14px; color: rgba(255,255,255,0.8); margin-top: 2px; }
+        .seller-modal-meta { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 4px; }
+
+        .seller-modal-body { padding: 20px 24px; }
+
+        .seller-modal-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .seller-stat {
+            background: #f8f4f9;
+            border-radius: 10px;
+            padding: 14px 10px;
+            text-align: center;
+        }
+        .seller-stat-num { font-size: 22px; font-weight: bold; color: #945a9b; }
+        .seller-stat-label { font-size: 11px; color: #888; margin-top: 3px; }
+
+        .seller-modal-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .seller-listings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .seller-listing-thumb {
+            border-radius: 8px;
+            overflow: hidden;
+            text-decoration: none;
+            color: inherit;
+            border: 1px solid #eee;
+            transition: box-shadow 0.2s;
+        }
+        .seller-listing-thumb:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+
+        .seller-listing-thumb img {
+            width: 100%;
+            height: 90px;
+            object-fit: cover;
+            background: #f0f0f0;
+        }
+        .seller-listing-thumb-info { padding: 8px 10px; }
+        .seller-listing-thumb-price { font-weight: bold; color: #945a9b; font-size: 13px; }
+        .seller-listing-thumb-title { font-size: 12px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .seller-modal-actions {
+            display: flex;
+            gap: 10px;
+            padding: 16px 24px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .seller-modal-btn {
+            flex: 1;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            border: none;
+            transition: all 0.2s;
+        }
+        .seller-modal-btn-primary {
+            background: #945a9b;
+            color: white;
+        }
+        .seller-modal-btn-primary:hover { background: #6a406e; }
+        .seller-modal-btn-secondary {
+            background: white;
+            color: #945a9b;
+            border: 2px solid #945a9b;
+        }
+        .seller-modal-btn-secondary:hover { background: #f8f4f9; }
+
+        /* Clickable seller card */
+        .seller-clickable {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .seller-clickable:hover { opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -455,16 +834,39 @@ if (isset($_SESSION['user_id'])) {
                 <span>←</span> Back to Listings
             </a>
 
+            <?php if (isset($_GET['bid']) && $_GET['bid'] === 'success'): ?>
+                <div style="background:#d1e7dd;color:#0f5132;padding:14px 18px;border-radius:10px;margin-bottom:16px;font-weight:600;">
+                    ✅ Your bid was placed successfully!
+                </div>
+            <?php endif; ?>
+
             <div class="listing-content">
                 <!-- Main Content -->
                 <div class="listing-main">
-                    <!-- Image Gallery -->
+                    <!-- Image Gallery with Carousel -->
                     <div class="image-gallery">
                         <?php if (!empty($images)): ?>
                             <img src="<?php echo htmlspecialchars(getImageUrl($images[0]['image_path'])); ?>" 
                                  alt="<?php echo htmlspecialchars($listing['title']); ?>" 
                                  class="main-image" 
                                  id="mainImage">
+                            
+                            <?php if (count($images) > 1): ?>
+                                <button class="carousel-arrow prev" onclick="changeImageCarousel(-1)" aria-label="Previous image">
+                                    ‹
+                                </button>
+                                <button class="carousel-arrow next" onclick="changeImageCarousel(1)" aria-label="Next image">
+                                    ›
+                                </button>
+                            <?php endif; ?>
+                            
+                            <div class="image-counter">
+                                <span id="currentImageNum">1</span> / <?php echo count($images); ?>
+                            </div>
+                            
+                            <button class="fullscreen-btn" onclick="openFullscreen()" aria-label="View fullscreen">
+                                ⛶
+                            </button>
                         <?php else: ?>
                             <img src="<?php echo getImageUrl(''); ?>" alt="No image" class="main-image" id="mainImage">
                         <?php endif; ?>
@@ -476,7 +878,8 @@ if (isset($_SESSION['user_id'])) {
                             <img src="<?php echo htmlspecialchars(getImageUrl($image['image_path'])); ?>" 
                                  alt="Thumbnail <?php echo $index + 1; ?>" 
                                  class="thumbnail <?php echo $index === 0 ? 'active' : ''; ?>"
-                                 onclick="changeImage(this)">
+                                 onclick="selectImageByIndex(<?php echo $index; ?>)"
+                                 data-index="<?php echo $index; ?>">
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
@@ -531,7 +934,7 @@ if (isset($_SESSION['user_id'])) {
                     <!-- Seller Info -->
                     <div class="sidebar-card">
                         <h3>Seller Information</h3>
-                        <div class="seller-info">
+                        <div class="seller-info seller-clickable" onclick="openSellerModal()">
                             <div class="seller-avatar">
                                 <?php echo strtoupper(substr($seller['first_name'], 0, 1)); ?>
                             </div>
@@ -544,13 +947,9 @@ if (isset($_SESSION['user_id'])) {
                                 </div>
                             </div>
                         </div>
-                        <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] != $listing['seller_id']): ?>
-                            <a href="messages.php?seller_id=<?php echo $listing['seller_id']; ?>&listing_id=<?php echo $listing_id; ?>" 
-                               class="action-btn btn-secondary" 
-                               style="text-decoration: none; display: block; text-align: center;">
-                                Contact Seller
-                            </a>
-                        <?php endif; ?>
+                        <button onclick="openSellerModal()" class="action-btn btn-secondary">
+                            👤 View Seller Profile
+                        </button>
                     </div>
 
                     <!-- Owner Management (only visible to listing owner) -->
@@ -628,9 +1027,9 @@ if (isset($_SESSION['user_id'])) {
                                         <input type="hidden" name="listing_id" value="<?php echo $listing_id; ?>">
                                         <input type="number" 
                                                name="bid_amount" 
-                                               placeholder="Enter bid amount" 
+                                               placeholder="Min: ₱<?php echo number_format($min_next_bid, 2); ?>"
                                                min="<?php echo $min_next_bid; ?>"
-                                               step="<?php echo $min_bid_increment; ?>"
+                                               step="any"
                                                required>
                                         <div style="font-size: 12px; color: #666; margin-top: 8px;">
                                             Minimum bid: ₱<?php echo number_format($min_next_bid, 2); ?>
@@ -658,16 +1057,19 @@ if (isset($_SESSION['user_id'])) {
                                 </p>
                             <?php endif; ?>
                         <?php else: ?>
+                            <?php if ($listing['status'] === 'sold'): ?>
+                                <div style="text-align: center; padding: 15px; background: #f8d7da; color: #721c24; border-radius: 8px; margin-bottom: 10px;">
+                                    <strong>🔴 This item has been sold</strong>
+                                    <p style="margin: 6px 0 0 0; font-size: 13px;">You can still message the seller.</p>
+                                </div>
+                            <?php endif; ?>
                             <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] != $listing['seller_id']): ?>
-                                <a href="checkout.php?listing_id=<?php echo $listing_id; ?>" class="action-btn btn-primary" style="text-decoration: none; display: block; text-align: center;">
-                                    Buy Now
+                                <a href="messages.php?seller_id=<?php echo $listing['seller_id']; ?>&listing_id=<?php echo $listing_id; ?>" class="action-btn btn-primary" style="text-decoration: none; display: block; text-align: center;">
+                                    💬 I'm Interested
                                 </a>
-                                <button onclick="addToCart(<?php echo $listing_id; ?>)" class="action-btn btn-secondary">
-                                    🛒 Add to Cart
-                                </button>
                             <?php elseif (!isset($_SESSION['user_id'])): ?>
                                 <a href="../login.php" class="action-btn btn-primary" style="text-decoration: none; display: block; text-align: center;">
-                                    Login to Buy
+                                    Login to Contact Seller
                                 </a>
                             <?php else: ?>
                                 <a href="create-listing.php?edit=<?php echo $listing_id; ?>" class="action-btn btn-primary" style="text-decoration: none; display: block; text-align: center; margin-bottom: 10px;">
@@ -702,7 +1104,7 @@ if (isset($_SESSION['user_id'])) {
                                         <div class="bid-user">by @<?php echo htmlspecialchars($bidder['username']); ?></div>
                                     </div>
                                     <div style="font-size: 12px; color: #999;">
-                                        <?php echo date('M d, h:i A', strtotime($bid['bid_time'])); ?>
+                                        <?php echo date('M d, h:i A', strtotime($bid['created_at'] ?? $bid['bid_time'] ?? '')); ?>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -714,14 +1116,216 @@ if (isset($_SESSION['user_id'])) {
         </div>
     </div>
 
+    <!-- Seller Profile Modal -->
+    <div class="seller-modal-overlay" id="sellerModal" onclick="closeSellerModal(event)">
+        <div class="seller-modal">
+            <div class="seller-modal-header">
+                <div class="seller-modal-avatar">
+                    <?php echo strtoupper(substr($seller['first_name'], 0, 1)); ?>
+                </div>
+                <div>
+                    <div class="seller-modal-name"><?php echo htmlspecialchars($seller['first_name'] . ' ' . $seller['last_name']); ?></div>
+                    <div class="seller-modal-username">@<?php echo htmlspecialchars($seller['username']); ?></div>
+                    <div class="seller-modal-meta">
+                        <?php if (!empty($seller_location_display)): ?>📍 <?php echo htmlspecialchars($seller_location_display); ?> &nbsp;·&nbsp; <?php endif; ?>
+                        📅 Member since <?php echo $seller_member_since; ?>
+                    </div>
+                </div>
+                <button class="seller-modal-close" onclick="closeSellerModal()">×</button>
+            </div>
+
+            <div class="seller-modal-body">
+                <!-- Stats -->
+                <div class="seller-modal-stats">
+                    <div class="seller-stat">
+                        <div class="seller-stat-num"><?php echo $seller_total_listings; ?></div>
+                        <div class="seller-stat-label">Listings</div>
+                    </div>
+                    <div class="seller-stat">
+                        <div class="seller-stat-num"><?php echo $seller_sold_count; ?></div>
+                        <div class="seller-stat-label">Sold</div>
+                    </div>
+                    <div class="seller-stat">
+                        <div class="seller-stat-num">
+                            <?php if ($seller_review_count > 0): ?>
+                                <?php echo $seller_avg_rating; ?> <span style="font-size:14px;color:#f5a623;">★</span>
+                            <?php else: ?>
+                                <span style="font-size:16px;color:#ccc;">—</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="seller-stat-label"><?php echo $seller_review_count; ?> Review<?php echo $seller_review_count !== 1 ? 's' : ''; ?></div>
+                    </div>
+                </div>
+
+                <!-- Active listings preview -->
+                <?php if (!empty($seller_active_listings)): ?>
+                <div class="seller-modal-section-title">Active Listings</div>
+                <div class="seller-listings-grid">
+                    <?php foreach ($seller_active_listings as $sl): ?>
+                        <a href="listing-details.php?id=<?php echo $sl['id']; ?>" class="seller-listing-thumb">
+                            <?php if (!empty($sl['thumb'])): ?>
+                                <img src="<?php echo htmlspecialchars($sl['thumb']); ?>" alt="<?php echo htmlspecialchars($sl['title']); ?>">
+                            <?php else: ?>
+                                <div style="width:100%;height:90px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:28px;">📦</div>
+                            <?php endif; ?>
+                            <div class="seller-listing-thumb-info">
+                                <div class="seller-listing-thumb-price">₱<?php echo number_format($sl['price'], 2); ?></div>
+                                <div class="seller-listing-thumb-title"><?php echo htmlspecialchars($sl['title']); ?></div>
+                            </div>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?>
+                    <p style="color:#aaa;font-size:14px;text-align:center;padding:10px 0 20px;">No active listings right now.</p>
+                <?php endif; ?>
+            </div>
+
+            <div class="seller-modal-actions">
+                <?php if (isset($_SESSION['user_id']) && $_SESSION['user_id'] != $listing['seller_id']): ?>
+                    <a href="messages.php?seller_id=<?php echo $listing['seller_id']; ?>&listing_id=<?php echo $listing_id; ?>"
+                       class="seller-modal-btn seller-modal-btn-secondary">
+                        💬 Message
+                    </a>
+                <?php endif; ?>
+                <a href="marketplace-profile.php?id=<?php echo $listing['seller_id']; ?>"
+                   class="seller-modal-btn seller-modal-btn-primary">
+                    View Full Profile
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Image Modal -->
+    <div class="fullscreen-modal" id="fullscreenModal" onclick="closeFullscreen()">
+        <button class="fullscreen-close" onclick="closeFullscreen()" aria-label="Close fullscreen">×</button>
+        <img id="fullscreenImage" src="" alt="Fullscreen view">
+    </div>
+
     <script>
-        function changeImage(thumbnail) {
-            const mainImage = document.getElementById('mainImage');
-            mainImage.src = thumbnail.src;
+        // Image Carousel State
+        let currentImageIndex = 0;
+        const imageUrls = <?php 
+            $imageArray = [];
+            if (is_array($images) && !empty($images)) {
+                foreach ($images as $img) {
+                    if (isset($img['image_path'])) {
+                        $imageArray[] = htmlspecialchars(getImageUrl($img['image_path']));
+                    }
+                }
+            }
+            echo json_encode($imageArray);
+        ?>;
+        const totalImages = imageUrls.length;
+
+        // Change image using carousel arrows
+        function changeImageCarousel(direction) {
+            if (totalImages === 0) return;
             
-            // Update active thumbnail
-            document.querySelectorAll('.thumbnail').forEach(t => t.classList.remove('active'));
-            thumbnail.classList.add('active');
+            currentImageIndex += direction;
+            
+            // Loop around
+            if (currentImageIndex < 0) {
+                currentImageIndex = totalImages - 1;
+            } else if (currentImageIndex >= totalImages) {
+                currentImageIndex = 0;
+            }
+            
+            updateMainImage();
+        }
+
+        // Select image by clicking thumbnail
+        function selectImageByIndex(index) {
+            if (index < 0 || index >= totalImages) return;
+            currentImageIndex = index;
+            updateMainImage();
+        }
+
+        // Update the main image and UI
+        function updateMainImage() {
+            const mainImage = document.getElementById('mainImage');
+            const imageCounter = document.getElementById('currentImageNum');
+            
+            if (mainImage && imageUrls[currentImageIndex]) {
+                // Fade effect
+                mainImage.style.opacity = '0';
+                setTimeout(() => {
+                    mainImage.src = imageUrls[currentImageIndex];
+                    mainImage.style.opacity = '1';
+                }, 150);
+            }
+            
+            // Update counter
+            if (imageCounter) {
+                imageCounter.textContent = currentImageIndex + 1;
+            }
+            
+            // Update thumbnails
+            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
+                thumb.classList.toggle('active', index === currentImageIndex);
+            });
+            
+            // Scroll thumbnail into view
+            const activeThumbnail = document.querySelector('.thumbnail.active');
+            if (activeThumbnail) {
+                activeThumbnail.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest',
+                    inline: 'center'
+                });
+            }
+        }
+
+        // Fullscreen functionality
+        function openFullscreen() {
+            const modal = document.getElementById('fullscreenModal');
+            const fullscreenImage = document.getElementById('fullscreenImage');
+            
+            if (modal && fullscreenImage && imageUrls[currentImageIndex]) {
+                fullscreenImage.src = imageUrls[currentImageIndex];
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeFullscreen() {
+            const modal = document.getElementById('fullscreenModal');
+            if (modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            const modal = document.getElementById('fullscreenModal');
+            const isFullscreen = modal && modal.classList.contains('active');
+            
+            if (e.key === 'ArrowLeft') {
+                changeImageCarousel(-1);
+                if (isFullscreen) {
+                    document.getElementById('fullscreenImage').src = imageUrls[currentImageIndex];
+                }
+            } else if (e.key === 'ArrowRight') {
+                changeImageCarousel(1);
+                if (isFullscreen) {
+                    document.getElementById('fullscreenImage').src = imageUrls[currentImageIndex];
+                }
+            } else if (e.key === 'Escape' && isFullscreen) {
+                closeFullscreen();
+            }
+        });
+
+        // Prevent modal close when clicking on image
+        document.getElementById('fullscreenImage')?.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+
+        // Legacy function for backward compatibility
+        function changeImage(thumbnail) {
+            const index = parseInt(thumbnail.dataset.index);
+            if (!isNaN(index)) {
+                selectImageByIndex(index);
+            }
         }
 
         function toggleFavorite(listingId) {
@@ -848,31 +1452,6 @@ if (isset($_SESSION['user_id'])) {
             });
         }
 
-        function addToCart(listingId) {
-            fetch('../actions/cart-action.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    listing_id: listingId,
-                    action: 'add'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert('Item added to cart!');
-                } else {
-                    alert(data.message || 'Failed to add to cart');
-                }
-            })
-            .catch(error => {
-                alert('Error adding to cart');
-                console.error(error);
-            });
-        }
-
         // Countdown Timer Functionality
         function updateCountdown() {
             const countdownElement = document.querySelector('.auction-countdown');
@@ -982,59 +1561,6 @@ if (isset($_SESSION['user_id'])) {
         setInterval(loadBidHistory, 30000);
         <?php endif; ?>
 
-        // Image gallery functionality
-        let currentImageIndex = 0;
-        const images = <?php 
-            // Ensure $images is an array and has image_path key
-            $imageArray = [];
-            if (is_array($images) && !empty($images)) {
-                foreach ($images as $img) {
-                    if (isset($img['image_path'])) {
-                        $imageArray[] = str_replace('../', '', $img['image_path']);
-                    }
-                }
-            }
-            echo json_encode($imageArray);
-        ?>;
-
-        function changeImage(direction) {
-            if (images.length === 0) return;
-            
-            currentImageIndex += direction;
-            if (currentImageIndex < 0) currentImageIndex = images.length - 1;
-            if (currentImageIndex >= images.length) currentImageIndex = 0;
-            
-            const mainImage = document.getElementById('mainImage');
-            if (mainImage) {
-                mainImage.src = images[currentImageIndex];
-            }
-            
-            // Update thumbnail selection
-            document.querySelectorAll('.thumbnail').forEach((thumb, index) => {
-                thumb.classList.toggle('active', index === currentImageIndex);
-            });
-        }
-
-        function selectImage(index) {
-            if (images.length === 0 || index < 0 || index >= images.length) return;
-            
-            currentImageIndex = index;
-            const mainImage = document.getElementById('mainImage');
-            if (mainImage) {
-                mainImage.src = images[index];
-            }
-            
-            document.querySelectorAll('.thumbnail').forEach((thumb, idx) => {
-                thumb.classList.toggle('active', idx === index);
-            });
-        }
-
-        // Keyboard navigation for image gallery
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowLeft') changeImage(-1);
-            if (e.key === 'ArrowRight') changeImage(1);
-        });
-
         // Bid form validation
         <?php if (isset($listing['listing_type']) && $listing['listing_type'] == 'BID' && isset($listing['status']) && $listing['status'] == 'OPEN'): ?>
         const bidForm = document.getElementById('bid-form');
@@ -1058,6 +1584,25 @@ if (isset($_SESSION['user_id'])) {
             });
         }
         <?php endif; ?>
+
+        // Seller Profile Modal
+        function openSellerModal() {
+            document.getElementById('sellerModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSellerModal(e) {
+            if (e && e.target !== document.getElementById('sellerModal')) return;
+            document.getElementById('sellerModal').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.getElementById('sellerModal')?.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        });
 
         console.log('Listing details page loaded successfully');
     </script>

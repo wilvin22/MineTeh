@@ -4,27 +4,24 @@ include "../database/supabase.php";
 include "../database/notifications_helper.php";
 
 if (!isset($_SESSION['user_id'])) {
-    die("Login required");
+    die(json_encode(['success' => false, 'message' => 'Login required']));
 }
 
 // Check if user is restricted
 $user_status = isset($_SESSION['user_status']) ? $_SESSION['user_status'] : 'active';
 if ($user_status === 'restricted') {
-    // Get user details to check restriction expiry
-    $user = $supabase->select('accounts', 'restriction_until, status_reason', ['account_id' => $_SESSION['user_id']], true);
-    
-    $restriction_until = isset($user['restriction_until']) ? $user['restriction_until'] : null;
-    
+    $user_row = $supabase->customQuery('accounts', 'restriction_until', 'account_id=eq.' . (int)$_SESSION['user_id'] . '&limit=1');
+    $user_row = !empty($user_row) ? $user_row[0] : null;
+    $restriction_until = $user_row['restriction_until'] ?? null;
+
     if ($restriction_until && strtotime($restriction_until) <= time()) {
-        // Restriction expired, reactivate user
         $supabase->update('accounts', [
-            'user_status' => 'active',
-            'restriction_until' => null,
-            'status_reason' => null
+            'user_status'      => 'active',
+            'restriction_until'=> null,
+            'status_reason'    => null
         ], ['account_id' => $_SESSION['user_id']]);
         $_SESSION['user_status'] = 'active';
     } else {
-        // Redirect to homepage with error message
         header("Location: ../home/homepage.php?error=restricted");
         exit;
     }
@@ -33,100 +30,86 @@ if ($user_status === 'restricted') {
 $notificationHelper = new NotificationsHelper();
 
 if (isset($_POST['place_bid'])) {
-    $user_id = $_SESSION['user_id'];
-    $listing_id = $_POST['listing_id'];
-    $bid_amount = $_POST['bid_amount'];
+    $user_id    = (int)$_SESSION['user_id'];
+    $listing_id = (int)$_POST['listing_id'];
+    $bid_amount = floatval($_POST['bid_amount']);
 
-    // Get listing info
-    $listing = $supabase->select('listings', '*', ['id' => $listing_id], true);
+    // Get listing
+    $listing_rows = $supabase->customQuery('listings', '*', 'id=eq.' . $listing_id . '&limit=1');
+    $listing = !empty($listing_rows) ? $listing_rows[0] : null;
 
     if (!$listing) {
-        die("Listing not found");
+        die("Listing not found.");
     }
 
-    // Check if user is trying to bid on their own listing
     if ($listing['seller_id'] == $user_id) {
-        die("You cannot bid on your own auction");
-    }
-
-    if ($listing['status'] !== 'OPEN' && $listing['status'] !== 'active') {
-        die("Bidding is closed");
+        die("You cannot bid on your own listing.");
     }
 
     if ($listing['listing_type'] !== 'BID') {
-        die("This listing does not accept bids");
+        die("This listing does not accept bids.");
     }
 
-    // Check if auction has ended
-    if (!empty($listing['end_time'])) {
-        $end_time = new DateTime($listing['end_time']);
-        $now = new DateTime();
-        if ($now > $end_time) {
-            die("Auction has ended");
-        }
+    // Accept both 'active' and 'OPEN' as valid statuses
+    $valid_statuses = ['active', 'OPEN'];
+    if (!in_array($listing['status'], $valid_statuses)) {
+        die("Bidding is closed for this listing.");
     }
 
-    // Get highest current bid
-    $highest_bid = $supabase->customQuery('bids', '*', 
+    // Check auction end time
+    if (!empty($listing['end_time']) && strtotime($listing['end_time']) <= time()) {
+        die("This auction has ended.");
+    }
+
+    // Get current highest bid
+    $highest_bid_rows = $supabase->customQuery('bids', 'bid_amount',
         'listing_id=eq.' . $listing_id . '&order=bid_amount.desc&limit=1');
-    
-    // Calculate minimum required bid
-    $min_bid_increment = isset($listing['min_bid_increment']) ? floatval($listing['min_bid_increment']) : 1.00;
-    $starting_price = isset($listing['starting_price']) ? floatval($listing['starting_price']) : floatval($listing['price']);
-    
-    if (!empty($highest_bid) && is_array($highest_bid)) {
-        $min_required_bid = floatval($highest_bid[0]['bid_amount']) + $min_bid_increment;
-    } else {
-        $min_required_bid = $starting_price;
-    }
-    
-    // Validate bid amount
-    if (floatval($bid_amount) < $min_required_bid) {
-        die("Bid amount must be at least ₱" . number_format($min_required_bid, 2) . 
-            " (minimum increment: ₱" . number_format($min_bid_increment, 2) . ")");
+    $highest_bid = !empty($highest_bid_rows) ? $highest_bid_rows[0] : null;
+
+    $min_increment    = isset($listing['min_bid_increment']) ? floatval($listing['min_bid_increment']) : 1.00;
+    $starting_price   = isset($listing['starting_price'])   ? floatval($listing['starting_price'])   : floatval($listing['price']);
+    $min_required_bid = $highest_bid ? floatval($highest_bid['bid_amount']) + $min_increment : $starting_price;
+
+    if ($bid_amount < $min_required_bid) {
+        die("Bid must be at least ₱" . number_format($min_required_bid, 2) .
+            " (increment: ₱" . number_format($min_increment, 2) . ").");
     }
 
     // Insert bid
-    $supabase->insert('bids', [
+    $inserted = $supabase->insert('bids', [
         'listing_id' => $listing_id,
-        'user_id' => $user_id,
+        'user_id'    => $user_id,
         'bid_amount' => $bid_amount
     ]);
 
-    // Get bidder's username
-    $bidder = $supabase->select('accounts', 'username', ['account_id' => $user_id], true);
-    $bidder_name = $bidder ? $bidder['username'] : 'Someone';
+    if (!$inserted) {
+        $err = $supabase->getLastError();
+        die("Failed to place bid: " . ($err ? $err['response'] : 'unknown error'));
+    }
 
-    // Notify seller about new bid
+    // Notify seller
+    $bidder_rows = $supabase->customQuery('accounts', 'username', 'account_id=eq.' . $user_id . '&limit=1');
+    $bidder_name = !empty($bidder_rows) ? $bidder_rows[0]['username'] : 'Someone';
+
     $notificationHelper->notifyBidReceived(
-        $listing['seller_id'],
-        $listing_id,
-        $listing['title'],
-        $bid_amount,
-        $bidder_name
+        $listing['seller_id'], $listing_id, $listing['title'], $bid_amount, $bidder_name
     );
 
-    // Check if there are previous bidders to notify (they've been outbid)
-    $previous_bids = $supabase->customQuery('bids', '*', 
+    // Notify previously outbid users (each only once)
+    $prev_bids = $supabase->customQuery('bids', 'user_id,bid_amount',
         'listing_id=eq.' . $listing_id . '&user_id=neq.' . $user_id . '&order=bid_amount.desc');
-    
-    if ($previous_bids && is_array($previous_bids)) {
-        $notified_users = [];
-        foreach ($previous_bids as $prev_bid) {
-            // Only notify each user once
-            if (!in_array($prev_bid['user_id'], $notified_users)) {
-                $notificationHelper->notifyOutbid(
-                    $prev_bid['user_id'],
-                    $listing_id,
-                    $listing['title'],
-                    $bid_amount
-                );
-                $notified_users[] = $prev_bid['user_id'];
+
+    if (!empty($prev_bids) && is_array($prev_bids)) {
+        $notified = [];
+        foreach ($prev_bids as $pb) {
+            if (!in_array($pb['user_id'], $notified)) {
+                $notificationHelper->notifyOutbid($pb['user_id'], $listing_id, $listing['title'], $bid_amount);
+                $notified[] = $pb['user_id'];
             }
         }
     }
 
-    header("Location: ../home/listing-details.php?id=$listing_id");
+    header("Location: ../home/listing-details.php?id=" . $listing_id . "&bid=success");
     exit;
 }
 ?>

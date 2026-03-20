@@ -18,8 +18,7 @@ class NotificationsHelper {
             'title' => $title,
             'message' => $message,
             'link' => $link,
-            'is_read' => false,
-            'created_at' => date('Y-m-d H:i:s')
+            'is_read' => false
         ];
         
         return $this->supabase->insert('notifications', $data);
@@ -121,8 +120,7 @@ function create_notification($user_id, $type, $message, $listing_id = null) {
         'title' => ucfirst(str_replace('_', ' ', $type)),
         'message' => $message,
         'link' => $listing_id ? "listing-details.php?id=$listing_id" : null,
-        'is_read' => false,
-        'created_at' => date('Y-m-d H:i:s')
+        'is_read' => false
     ];
     
     return $supabase->insert('notifications', $data);

@@ -1,6 +1,12 @@
 <?php
 session_start();
 
+// Block admin access to user pages
+if (isset($_SESSION['admin_is_admin']) && $_SESSION['admin_is_admin'] === true) {
+    header("Location: ../admin/index.php");
+    exit;
+}
+
 // Set timezone to match your local timezone
 date_default_timezone_set('Asia/Manila'); // Change this to your timezone
 
@@ -583,6 +589,97 @@ body {
     }
 }
 
+/* ── Profile button top-right ── */
+#profile-btn-wrap {
+    position: fixed;
+    top: 16px;
+    right: 20px;
+    z-index: 2000;
+}
+#profile-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+#profile-avatar-circle {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #945a9b, #6a406e);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    border: 2px solid rgba(255,255,255,0.3);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    transition: box-shadow 0.2s;
+}
+#profile-btn:hover #profile-avatar-circle {
+    box-shadow: 0 4px 14px rgba(148,90,155,0.5);
+}
+#profile-chevron {
+    font-size: 13px;
+    color: #555;
+    line-height: 1;
+}
+#profile-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 240px;
+    background: #242526;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+    padding: 14px 10px 10px;
+    color: white;
+}
+#profile-dropdown.open { display: block; }
+#profile-dropdown-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 6px 10px;
+}
+#profile-dropdown-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #945a9b, #6a406e);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+#profile-dropdown-name {
+    font-weight: bold;
+    font-size: 15px;
+    color: #e4e6eb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.profile-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: #e4e6eb;
+    text-decoration: none;
+    font-size: 15px;
+    transition: background 0.15s;
+}
+.profile-menu-item:hover { background: #3a3b3c; color: white; }
+.profile-menu-icon { font-size: 18px; flex-shrink: 0; }
+
 </style>
 
 <!-- Responsive CSS -->
@@ -592,7 +689,32 @@ body {
 
 <body>
     <?php include '../sidebar/sidebar.php'; ?>
-    
+
+    <!-- Profile button top-right -->
+    <div id="profile-btn-wrap">
+        <div id="profile-btn" onclick="toggleProfileMenu()" title="Account">
+            <div id="profile-avatar-circle">
+                <?php echo strtoupper(substr($_SESSION['username'] ?? 'U', 0, 1)); ?>
+            </div>
+            <span id="profile-chevron">▾</span>
+        </div>
+        <div id="profile-dropdown">
+            <div id="profile-dropdown-header">
+                <div id="profile-dropdown-avatar">
+                    <?php echo strtoupper(substr($_SESSION['username'] ?? 'U', 0, 1)); ?>
+                </div>
+                <span id="profile-dropdown-name"><?php echo htmlspecialchars($_SESSION['username'] ?? 'User'); ?></span>
+            </div>
+            <hr style="border:none;border-top:1px solid #3a3a3a;margin:10px 0;">
+            <a href="account-settings.php" class="profile-menu-item">
+                <span class="profile-menu-icon">✏️</span> Edit Profile
+            </a>
+            <a href="../logout.php" class="profile-menu-item">
+                <span class="profile-menu-icon">🚪</span> Log out
+            </a>
+        </div>
+    </div>
+
     <div id="main-content" class="main-wrapper">
         <?php if ($restriction_notice): ?>
         <div style="background: linear-gradient(135deg, #ff6b6b, #ee5a6f); color: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);">
@@ -670,11 +792,22 @@ body {
         <div id="listings-grid">
             <?php
                 // Get only active listings from Supabase (exclude disabled/inactive)
-                $listings = $supabase->customQuery('listings', '*', 'status=eq.active');
+                $listings = $supabase->customQuery('listings', '*', 'status=eq.active&order=created_at.desc&or=(listing_type.eq.FIXED,and(listing_type.eq.BID,end_time.gt.' . date('Y-m-d\TH:i:s') . '))');
 
                 if (empty($listings)) {
                     echo "<div style='grid-column: 1/-1; text-align: center; padding: 60px 20px; color: #999;'><div style='font-size: 48px; margin-bottom: 16px;'>📦</div><h2>No listings found</h2></div>";
                 } else {
+                    // Sort: own listings first, then by created_at desc (already ordered from query)
+                    if (isset($_SESSION['user_id'])) {
+                        $uid = $_SESSION['user_id'];
+                        usort($listings, function($a, $b) use ($uid) {
+                            $a_own = ($a['seller_id'] == $uid) ? 0 : 1;
+                            $b_own = ($b['seller_id'] == $uid) ? 0 : 1;
+                            if ($a_own !== $b_own) return $a_own - $b_own;
+                            // Within same group keep created_at desc order
+                            return strtotime($b['created_at']) - strtotime($a['created_at']);
+                        });
+                    }
                     // Get all listing IDs
                     $listingIds = array_column($listings, 'id');
                     
@@ -989,6 +1122,17 @@ body {
     
     <!-- Responsive JavaScript -->
     <script src="../js/responsive.js"></script>
+    <script>
+    function toggleProfileMenu() {
+        document.getElementById('profile-dropdown').classList.toggle('open');
+    }
+    document.addEventListener('click', function(e) {
+        var wrap = document.getElementById('profile-btn-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+            document.getElementById('profile-dropdown').classList.remove('open');
+        }
+    });
+    </script>
 </body>
 
 </html>
