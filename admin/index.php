@@ -222,6 +222,7 @@ if (!$recent_listings) $recent_listings = [];
         <a href="index.php" class="nav-item active">📊 Dashboard</a>
         <a href="users.php" class="nav-item">👥 Users</a>
         <a href="listings.php" class="nav-item">📦 Listings</a>
+        <a href="archived.php" class="nav-item">🗄️ Archived</a>
         <a href="logout.php" class="nav-item logout">🚪 Logout</a>
     </div>
 

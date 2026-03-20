@@ -365,6 +365,10 @@ $listings = $supabase->select('listings', '*', ['seller_id' => $user_id]);
                                                     class="btn-small btn-disable">
                                                 🚫 Disable
                                             </button>
+                                        <?php elseif ($listing['status'] === 'archived'): ?>
+                                            <span class="btn-small" style="background:#e9ecef;color:#999;cursor:not-allowed;" title="Archived by admin">
+                                                🔒 Archived
+                                            </span>
                                         <?php else: ?>
                                             <button onclick="enableListing(<?php echo $listing['id']; ?>)" 
                                                     class="btn-small btn-enable">

@@ -77,11 +77,12 @@ switch ($action) {
         break;
         
     case 'enable':
-        // Enable listing - set status back to active
-        $result = $supabase->update('listings', 
-            ['status' => 'active'], 
-            ['id' => $listing_id]
-        );
+        // Block if archived by admin
+        if ($listing['status'] === 'archived') {
+            echo json_encode(['success' => false, 'message' => 'This listing has been archived by an admin and cannot be re-enabled.']);
+            exit;
+        }
+        $result = $supabase->update('listings', ['status' => 'active'], ['id' => $listing_id]);
         break;
         
     case 'delete':

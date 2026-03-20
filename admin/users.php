@@ -19,14 +19,6 @@ if (isset($_POST['delete_user'])) {
     exit;
 }
 
-if (isset($_POST['toggle_admin'])) {
-    $user_id = (int)$_POST['user_id'];
-    $is_admin = $_POST['is_admin'] === 'true' ? false : true;
-    $supabase->update('accounts', ['is_admin' => $is_admin], ['account_id' => $user_id]);
-    header("Location: users.php?success=" . urlencode("User role updated successfully"));
-    exit;
-}
-
 // Check for success message from redirect
 $success = isset($_GET['success']) ? $_GET['success'] : null;
 
@@ -166,6 +158,7 @@ $users = $supabase->customQuery('accounts', '*', 'order=created_at.desc');
             padding: 25px;
             border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow-x: auto;
         }
 
         .success {
@@ -211,26 +204,41 @@ $users = $supabase->customQuery('accounts', '*', 'order=created_at.desc');
         }
 
         .btn {
-            padding: 6px 12px;
+            padding: 7px 0;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-size: 12px;
-            margin-right: 5px;
+            font-weight: 600;
+            white-space: nowrap;
+            width: 120px;
+            text-align: center;
+            display: block;
         }
 
-        .btn-primary {
-            background: #667eea;
+        .actions-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            align-items: flex-start;
+        }
+
+        .actions-cell form {
+            margin: 0;
+            width: 120px;
+        }
+
+        .actions-cell form .btn {
+            width: 100%;
+        }
+
+        .btn-warning {
+            background: #f39c12;
             color: white;
         }
 
         .btn-danger {
             background: #e74c3c;
-            color: white;
-        }
-
-        .btn-warning {
-            background: #f39c12;
             color: white;
         }
 
@@ -391,6 +399,7 @@ $users = $supabase->customQuery('accounts', '*', 'order=created_at.desc');
             <a href="index.php" class="nav-item">📊 Dashboard</a>
             <a href="users.php" class="nav-item active">👥 Users</a>
             <a href="listings.php" class="nav-item">📦 Listings</a>
+            <a href="archived.php" class="nav-item">🗄️ Archived</a>
             <a href="logout.php" class="nav-item" style="margin-top:20px;background:rgba(231,76,60,0.3);">🚪 Logout</a>
         </div>
 
@@ -453,21 +462,16 @@ $users = $supabase->customQuery('accounts', '*', 'order=created_at.desc');
                                     <td><?php echo date('M d, Y', strtotime($user['created_at'])); ?></td>
                                     <td>
                                         <?php if ($user['account_id'] != $_SESSION['admin_user_id']): ?>
-                                            <button type="button" class="btn btn-warning" 
-                                                    onclick="openStatusModal(<?php echo $user['account_id']; ?>, '<?php echo htmlspecialchars($user['username']); ?>', '<?php echo $status; ?>')">
-                                                Change Status
-                                            </button>
-                                            <form method="POST" style="display: inline;">
-                                                <input type="hidden" name="user_id" value="<?php echo $user['account_id']; ?>">
-                                                <input type="hidden" name="is_admin" value="<?php echo $user['is_admin'] ? 'true' : 'false'; ?>">
-                                                <button type="submit" name="toggle_admin" class="btn btn-primary">
-                                                    <?php echo $user['is_admin'] ? 'Remove Admin' : 'Make Admin'; ?>
+                                            <div class="actions-cell">
+                                                <button type="button" class="btn btn-warning" 
+                                                        onclick="openStatusModal(<?php echo $user['account_id']; ?>, '<?php echo htmlspecialchars($user['username']); ?>', '<?php echo $status; ?>')">
+                                                    Change Status
                                                 </button>
-                                            </form>
-                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure?');">
-                                                <input type="hidden" name="user_id" value="<?php echo $user['account_id']; ?>">
-                                                <button type="submit" name="delete_user" class="btn btn-danger">Delete</button>
-                                            </form>
+                                                <form method="POST" onsubmit="return confirm('Are you sure?');">
+                                                    <input type="hidden" name="user_id" value="<?php echo $user['account_id']; ?>">
+                                                    <button type="submit" name="delete_user" class="btn btn-danger">Delete</button>
+                                                </form>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
                                 </tr>

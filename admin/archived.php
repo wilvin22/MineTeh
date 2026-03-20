@@ -10,22 +10,14 @@ if (!isset($_SESSION['admin_user_id']) || !isset($_SESSION['admin_is_admin']) ||
     exit;
 }
 
-if (isset($_POST['archive_listing'])) {
+if (isset($_POST['restore_listing'])) {
     $listing_id = (int)$_POST['listing_id'];
-    $supabase->update('listings', ['status' => 'archived'], ['id' => $listing_id]);
-    $success = "Listing archived successfully";
+    $supabase->update('listings', ['status' => 'inactive'], ['id' => $listing_id]);
+    $success = "Listing restored successfully";
 }
 
-if (isset($_POST['toggle_status'])) {
-    $listing_id = (int)$_POST['listing_id'];
-    $current_status = $_POST['current_status'];
-    $new_status = $current_status === 'active' ? 'inactive' : 'active';
-    $supabase->update('listings', ['status' => $new_status], ['id' => $listing_id]);
-    $success = "Listing status updated successfully";
-}
-
-// Only show non-archived listings here
-$listings = $supabase->customQuery('listings', '*', 'status=neq.archived&order=created_at.desc');
+// Only archived listings
+$listings = $supabase->customQuery('listings', '*', 'status=eq.archived&order=created_at.desc');
 
 if (!empty($listings)) {
     foreach ($listings as &$listing) {
@@ -40,7 +32,7 @@ if (!empty($listings)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Listings Management - Admin</title>
+    <title>Archived Listings - Admin</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f7fa; }
@@ -62,23 +54,18 @@ if (!empty($listings)) {
         .header h1 { font-size: 32px; color: #333; }
         .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow-x: auto; }
         .success { background: #d1e7dd; color: #0f5132; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .empty { text-align: center; padding: 60px 20px; color: #999; }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
         th { background: #f8f9fa; font-weight: bold; color: #333; }
-        .badge { padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
-        .badge-active   { background: #d1e7dd; color: #0f5132; }
-        .badge-inactive { background: #f8d7da; color: #842029; }
-        .badge-sold     { background: #cfe2ff; color: #084298; }
+        .badge-archived { background: #e9ecef; color: #495057; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: bold; }
         .btn {
             padding: 7px 0; border: none; border-radius: 6px; cursor: pointer;
             font-size: 12px; font-weight: 600; white-space: nowrap;
             width: 110px; text-align: center; display: block;
         }
-        .btn-primary  { background: #667eea; color: white; }
-        .btn-archive  { background: #6c757d; color: white; }
-        .actions-cell { display: flex; flex-direction: column; gap: 5px; }
-        .actions-cell form { margin: 0; width: 110px; }
-        .actions-cell form .btn { width: 100%; }
+        .btn-restore { background: #28a745; color: white; }
     </style>
 </head>
 <body>
@@ -87,28 +74,33 @@ if (!empty($listings)) {
         <div class="logo">🛡️ Admin Panel</div>
         <a href="index.php" class="nav-item">📊 Dashboard</a>
         <a href="users.php" class="nav-item">👥 Users</a>
-        <a href="listings.php" class="nav-item active">📦 Listings</a>
-        <a href="archived.php" class="nav-item">🗄️ Archived</a>
+        <a href="listings.php" class="nav-item">📦 Listings</a>
+        <a href="archived.php" class="nav-item active">🗄️ Archived</a>
         <a href="logout.php" class="nav-item" style="margin-top:20px;background:rgba(231,76,60,0.3);">🚪 Logout</a>
     </div>
 
     <div class="main-content">
-        <div class="header"><h1>Listings Management</h1></div>
+        <div class="header"><h1>Archived Listings</h1></div>
 
         <?php if (isset($success)): ?>
             <div class="success"><?php echo $success; ?></div>
         <?php endif; ?>
 
         <div class="card">
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th><th>Title</th><th>Seller</th><th>Price</th>
-                        <th>Type</th><th>Status</th><th>Created</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if (!empty($listings)): ?>
+            <?php if (empty($listings)): ?>
+                <div class="empty">
+                    <div class="empty-icon">🗄️</div>
+                    <p>No archived listings yet.</p>
+                </div>
+            <?php else: ?>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>Title</th><th>Seller</th><th>Price</th>
+                            <th>Type</th><th>Status</th><th>Created</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
                         <?php foreach ($listings as $listing): ?>
                             <tr>
                                 <td><?php echo $listing['id']; ?></td>
@@ -116,32 +108,19 @@ if (!empty($listings)) {
                                 <td><?php echo htmlspecialchars($listing['seller_name']); ?></td>
                                 <td>₱<?php echo number_format($listing['price'], 2); ?></td>
                                 <td><?php echo $listing['listing_type']; ?></td>
-                                <td>
-                                    <span class="badge badge-<?php echo strtolower($listing['status']); ?>">
-                                        <?php echo ucfirst($listing['status']); ?>
-                                    </span>
-                                </td>
+                                <td><span class="badge-archived">Archived</span></td>
                                 <td><?php echo date('M d, Y', strtotime($listing['created_at'])); ?></td>
                                 <td>
-                                    <div class="actions-cell">
-                                        <form method="POST">
-                                            <input type="hidden" name="listing_id" value="<?php echo $listing['id']; ?>">
-                                            <input type="hidden" name="current_status" value="<?php echo $listing['status']; ?>">
-                                            <button type="submit" name="toggle_status" class="btn btn-primary">
-                                                <?php echo $listing['status'] === 'active' ? 'Deactivate' : 'Activate'; ?>
-                                            </button>
-                                        </form>
-                                        <form method="POST" onsubmit="return confirm('Archive this listing?');">
-                                            <input type="hidden" name="listing_id" value="<?php echo $listing['id']; ?>">
-                                            <button type="submit" name="archive_listing" class="btn btn-archive">Archive</button>
-                                        </form>
-                                    </div>
+                                    <form method="POST">
+                                        <input type="hidden" name="listing_id" value="<?php echo $listing['id']; ?>">
+                                        <button type="submit" name="restore_listing" class="btn btn-restore">Restore</button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+                    </tbody>
+                </table>
+            <?php endif; ?>
         </div>
     </div>
 </div>
